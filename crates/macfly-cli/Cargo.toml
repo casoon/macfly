@@ -1,9 +1,16 @@
 [package]
-name = "macfly-cli"
+name = "macfly"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "MacFly CLI: safe, fast, AI-ready macOS automation in pure Rust"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+description = "Safe, deterministic macOS automation CLI & stdio MCP server with DLP firewall and SHA-256 plan approval"
 
 [[bin]]
 name = "macfly"
@@ -11,8 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-macfly-adapters = { path = "../macfly-adapters" }
-macfly-core = { path = "../macfly-core" }
+macfly-adapters = { version = "0.1.0", path = "../macfly-adapters" }
+macfly-core = { version = "0.1.0", path = "../macfly-core" }
 runemark.workspace = true
 serde.workspace = true
 serde_json.workspace = true

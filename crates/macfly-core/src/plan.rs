@@ -488,7 +488,7 @@ impl PlanStore {
                 plans.push(plan);
             }
         }
-        plans.sort_by(|a, b| b.created_at_unix.cmp(&a.created_at_unix));
+        plans.sort_by_key(|a| std::cmp::Reverse(a.created_at_unix));
         Ok(plans)
     }
 

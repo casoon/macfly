@@ -1,0 +1,141 @@
+name: Release
+
+# Publishes `macfly-core`, `macfly-adapters`, and `macfly` to crates.io using
+# crates.io Trusted Publishing (GitHub OIDC, no stored API token), builds
+# macOS release binaries, and attaches them with SHA256SUMS to the GitHub Release.
+#
+# One-time setup on crates.io (for each crate: macfly-core, macfly-adapters, macfly):
+#   Repository:  casoon/macfly
+#   Workflow:    release.yml
+#   Environment: crates-io
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify Workspace
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Run tests & clippy
+        run: |
+          cargo test --workspace
+          cargo clippy --workspace --all-targets -- -D warnings
+
+  publish-crates:
+    name: Publish to crates.io (Trusted Publishing)
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Authenticate with crates.io (OIDC)
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish macfly-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p macfly-core
+
+      - name: Wait for crates.io index propagation
+        run: sleep 20
+
+      - name: Publish macfly-adapters
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p macfly-adapters
+
+      - name: Wait for crates.io index propagation
+        run: sleep 20
+
+      - name: Publish macfly
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish -p macfly
+
+  build-binaries:
+    name: Build macOS binary (${{ matrix.target }})
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p macfly
+
+      - name: Package archive
+        run: |
+          mkdir -p dist
+          tar -czf "dist/macfly-${{ matrix.target }}.tar.gz" \
+            -C "target/${{ matrix.target }}/release" macfly
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macfly-${{ matrix.target }}
+          path: dist/macfly-*.tar.gz
+          if-no-files-found: error
+
+  github-release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish-crates, build-binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macfly-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum macfly-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/macfly-*.tar.gz
+            dist/SHA256SUMS

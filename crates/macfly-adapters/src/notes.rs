@@ -269,7 +269,7 @@ impl NotesAdapter {
                 notes,
             })
             .collect();
-        duplicate_titles.sort_by(|a, b| b.count.cmp(&a.count));
+        duplicate_titles.sort_by_key(|a| std::cmp::Reverse(a.count));
 
         let mut oldest = all_notes.notes.clone();
         oldest.sort_by(|a, b| {

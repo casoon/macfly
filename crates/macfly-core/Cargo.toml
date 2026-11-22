@@ -2,8 +2,15 @@
 name = "macfly-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "Core data model, config, DLP redaction, HTML fidelity analysis, and policy engine for MacFly"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+description = "Core data model, config, DLP redaction, HTML fidelity analysis, and plan engine for MacFly"
 
 [dependencies]
 dirs.workspace = true

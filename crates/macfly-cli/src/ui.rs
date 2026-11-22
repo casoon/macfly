@@ -129,7 +129,7 @@ pub fn render_notes_overview(ov: &NotesOverview, color: ColorMode) {
         "{}",
         console.paint(
             Tone::Title,
-            &format!(
+            format!(
                 "Apple Notes Overview (profile: {} | {} accounts | {} folders | {} notes)",
                 ov.profile, ov.total_accounts, ov.total_folders, ov.total_notes
             )
@@ -140,7 +140,7 @@ pub fn render_notes_overview(ov: &NotesOverview, color: ColorMode) {
             "{}",
             console.paint(
                 Tone::Muted,
-                &format!(
+                format!(
                     "  {} folder(s) hidden by profile policy",
                     ov.hidden_by_policy_folders
                 )
@@ -279,7 +279,7 @@ pub fn render_mail_overview(ov: &MailOverview, color: ColorMode) {
         "{}",
         console.paint(
             Tone::Title,
-            &format!(
+            format!(
                 "Apple Mail Overview (profile: {} | {} accounts | {} mailboxes | {} unread)",
                 ov.profile, ov.total_accounts, ov.total_mailboxes, ov.total_unread
             )
@@ -298,7 +298,7 @@ pub fn render_mail_overview(ov: &MailOverview, color: ColorMode) {
         "\n{}",
         console.paint(
             Tone::Info,
-            &format!("Signatures from Apple Mail ({}):", ov.signatures.len())
+            format!("Signatures from Apple Mail ({}):", ov.signatures.len())
         )
     );
     for s in &ov.signatures {
