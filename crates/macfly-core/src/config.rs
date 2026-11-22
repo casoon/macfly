@@ -262,7 +262,7 @@ fn default_profile_name() -> String {
 }
 
 fn default_timeout_secs() -> u64 {
-    25
+    45
 }
 
 fn default_true() -> bool {

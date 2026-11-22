@@ -33,29 +33,37 @@ function isoOrNull(val) {
     const listName = String(lst.name());
     if (listFilter && listName.toLowerCase() !== listFilter) continue;
 
-    let items = [];
+    // Batch property fetch on open reminders (3 Apple Events per list instead of N*3)
+    const open = lst.reminders.whose({ completed: false });
+    let names = [];
     try {
-      items = lst.reminders.whose({ completed: false })();
+      names = open.name() || [];
     } catch (_) {
-      items = [];
+      names = [];
+    }
+    if (names.length === 0) continue;
+
+    let dues = [];
+    let priorities = [];
+    try {
+      dues = open.dueDate() || [];
+    } catch (_) {
+      dues = new Array(names.length).fill(null);
+    }
+    try {
+      priorities = open.priority() || [];
+    } catch (_) {
+      priorities = new Array(names.length).fill(0);
     }
 
-    for (let j = 0; j < items.length; j++) {
-      const r = items[j];
-      let title = "(Ohne Titel)";
+    for (let j = 0; j < names.length; j++) {
+      const title = String(names[j] || "(Ohne Titel)");
       let due = null;
       let overdue = false;
-      let priority = 0;
-      try { title = String(r.name() || "(Ohne Titel)"); } catch (_) {}
-      try {
-        const d = r.dueDate();
-        if (d) {
-          due = isoOrNull(d);
-          overdue = new Date(d).getTime() < nowMs;
-        }
-      } catch (_) {}
-      try { priority = Number(r.priority() || 0); } catch (_) {}
-
+      if (dues[j]) {
+        due = isoOrNull(dues[j]);
+        if (due) overdue = new Date(dues[j]).getTime() < nowMs;
+      }
       if (overdueOnly && !overdue) continue;
 
       out.push({
@@ -63,7 +71,7 @@ function isoOrNull(val) {
         title: title,
         due_at: due,
         overdue: overdue,
-        priority: priority,
+        priority: Number(priorities[j] || 0),
       });
     }
   }

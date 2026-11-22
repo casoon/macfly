@@ -17,6 +17,16 @@ function isoOrNull(val) {
   }
 }
 
+const SKIP_SYSTEM_CALS = new Set([
+  "deutsche feiertage",
+  "geburtstage",
+  "siri-vorschläge",
+  "geplante erinnerungen",
+  "birthdays",
+  "siri suggestions",
+  "scheduled reminders",
+]);
+
 (function () {
   const input = readInput();
   const days = Number(input.days || 7);
@@ -24,8 +34,8 @@ function isoOrNull(val) {
   const limit = Number(input.limit || 50);
 
   const now = new Date();
-  const startWindow = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const endWindow = new Date(startWindow.getTime() + days * 24 * 60 * 60 * 1000);
+  const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
+  const endMs = startMs + days * 24 * 60 * 60 * 1000;
 
   const Calendar = Application("Calendar");
   const cals = Calendar.calendars();
@@ -34,43 +44,37 @@ function isoOrNull(val) {
   for (let i = 0; i < cals.length; i++) {
     const cal = cals[i];
     const calName = String(cal.name());
-    if (calendarFilter && calName.toLowerCase() !== calendarFilter) continue;
+    const calLower = calName.toLowerCase();
 
-    let events = [];
-    try {
-      events = cal.events.whose({
-        _and: [
-          { startDate: { _greaterThanEquals: startWindow } },
-          { startDate: { _lessThanEquals: endWindow } },
-        ],
-      })();
-    } catch (_) {
-      events = [];
+    if (calendarFilter) {
+      if (calLower !== calendarFilter) continue;
+    } else if (SKIP_SYSTEM_CALS.has(calLower)) {
+      continue;
     }
 
-    for (let j = 0; j < events.length; j++) {
-      const ev = events[j];
-      let title = "(Ohne Titel)";
-      let start = null;
-      let end = null;
-      let allDay = false;
-      let location = null;
-      try { title = String(ev.summary() || "(Ohne Titel)"); } catch (_) {}
-      try { start = isoOrNull(ev.startDate()); } catch (_) {}
-      try { end = isoOrNull(ev.endDate()); } catch (_) {}
-      try { allDay = Boolean(ev.alldayEvent()); } catch (_) {}
-      try {
-        const loc = ev.location();
-        if (loc) location = String(loc);
-      } catch (_) {}
+    // Batch property fetch (2 Apple Events per calendar instead of slow .whose evaluation)
+    let starts = [];
+    let summaries = [];
+    try {
+      starts = cal.events.startDate() || [];
+      summaries = cal.events.summary() || [];
+    } catch (_) {
+      continue;
+    }
+
+    for (let j = 0; j < starts.length; j++) {
+      const sd = starts[j];
+      if (!sd) continue;
+      const ms = new Date(sd).getTime();
+      if (isNaN(ms) || ms < startMs || ms > endMs) continue;
 
       out.push({
         calendar: calName,
-        title: title,
-        start_at: start,
-        end_at: end,
-        all_day: allDay,
-        location: location,
+        title: String(summaries[j] || "(Ohne Titel)"),
+        start_at: isoOrNull(sd),
+        end_at: null,
+        all_day: false,
+        location: null,
       });
     }
   }

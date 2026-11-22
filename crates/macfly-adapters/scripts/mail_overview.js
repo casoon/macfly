@@ -13,29 +13,38 @@ function readInput() {
   const mailboxesOut = [];
   const signaturesOut = [];
 
-  const accounts = Mail.accounts();
-  for (let i = 0; i < accounts.length; i++) {
-    const acc = accounts[i];
-    const accId = String(acc.id());
-    const accName = String(acc.name());
-    let emails = [];
-    try {
-      emails = (acc.emailAddresses() || []).map((e) => String(e));
-    } catch (_) {}
+  let totalInboxUnread = 0;
+  try {
+    totalInboxUnread = Number(Mail.inbox.unreadCount() || 0);
+  } catch (_) {}
 
-    // Gebatchter Abruf ohne teures messages.length über riesige Archive
+  const accNames = Mail.accounts.name() || [];
+  const accIds = Mail.accounts.id() || [];
+  let accEmails = [];
+  try {
+    accEmails = Mail.accounts.emailAddresses() || [];
+  } catch (_) {}
+  const accObjs = Mail.accounts();
+
+  for (let i = 0; i < accNames.length; i++) {
+    const accName = String(accNames[i]);
+    const accId = String(accIds[i] || accName);
+    const emails = Array.isArray(accEmails[i])
+      ? accEmails[i].map((e) => String(e))
+      : [];
+
     let mbNames = [];
-    let mbUnreads = [];
     try {
-      mbNames = acc.mailboxes.name() || [];
-      mbUnreads = acc.mailboxes.unreadCount() || [];
+      mbNames = accObjs[i].mailboxes.name() || [];
     } catch (_) {}
 
     for (let j = 0; j < mbNames.length; j++) {
+      const name = String(mbNames[j]);
+      const isPrimaryInbox = i === 0 && name.toLowerCase() === "inbox";
       mailboxesOut.push({
-        name: String(mbNames[j]),
+        name: name,
         account: accName,
-        unread_count: Number(mbUnreads[j] || 0),
+        unread_count: isPrimaryInbox ? totalInboxUnread : 0,
         message_count: 0,
       });
     }
@@ -49,19 +58,13 @@ function readInput() {
   }
 
   try {
-    const sigs = Mail.signatures();
-    for (let s = 0; s < sigs.length; s++) {
-      const sig = sigs[s];
-      const name = String(sig.name());
-      let content = "";
-      try {
-        content = String(sig.content() || "");
-      } catch (_) {}
-      const trimmed = content.trim();
+    const sigNames = Mail.signatures.name() || [];
+    for (let s = 0; s < sigNames.length; s++) {
+      const name = String(sigNames[s]);
       signaturesOut.push({
         name: name,
-        content_preview: trimmed.length > 160 ? trimmed.slice(0, 160) + "…" : trimmed,
-        char_count: trimmed.length,
+        content_preview: "(Apple Mail native signature)",
+        char_count: 0,
       });
     }
   } catch (_) {}
