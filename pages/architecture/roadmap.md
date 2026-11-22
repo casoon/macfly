@@ -4,10 +4,11 @@ description: Implemented capabilities and upcoming security & performance milest
 order: 3
 ---
 
-## Implemented (v0.3)
+## Implemented (v0.5.0)
 
 - **Pure Rust 3-crate workspace** (`macfly-core`, `macfly-adapters`, `macfly`)
-  published on `crates.io` with GitHub OIDC Trusted Publishing
+  published on `crates.io` with GitHub OIDC Trusted Publishing, plus a direct
+  macOS binary installer (`install.sh`, SHA-256 verified, no Cargo required)
 - **Single-Point-of-Truth config** (`~/.config/macfly/config.json`) with
   profiles, allowlists/denylists, DLP redaction, and Apple Mail signature lookup
 - **Apple Notes:** live container hierarchy paths, cleanup audit, search,
@@ -20,17 +21,24 @@ order: 3
 - **Apple Contacts:** fast batched search, duplicate/empty-contact audit
   (`contacts audit`), and Markdown contact card export (`contacts export`)
 - **Apple Calendar & Reminders:** upcoming events, open/overdue reminders,
-  unified 4-app `macfly context daily-brief`, Markdown export, and multi-format
-  Reminders import (`PlanOperation::RemindersCreate`)
+  unified `daily-brief`, `person`, `meeting-prep`, and `weekly-review` context
+  packs, direct PDF/Typst/Markdown reports (`macfly report`), Markdown export,
+  and multi-format Reminders import (`PlanOperation::RemindersCreate`)
 - **Apple Safari:** open tab inspection (`safari tabs`), Markdown export, and
   direct tab-to-note migration via plan (`safari to-note`)
 - **Apple Shortcuts (`macfly shortcuts`):** allowlist-gated bridge to macOS
-  `shortcuts list` / `shortcuts run` via `PlanOperation::ShortcutsRun`
+  `shortcuts list` / `shortcuts run` (`RiskLevel::High`, `Irreversible`)
 - **Terminal presentation with `runemark`:** semantic verdicts, reports,
   error blocks, and `NO_COLOR` support
-- **Transactional plan engine:** `plan create → inspect → approve → apply` with
-  SHA-256 tamper detection, interactive TTY guard, and JSONL audit journal
-- **Built-in `macfly mcp` (`stdio`) server** exposing 15 read & plan-propose tools
+- **Hardened, resumable plan engine:** `plan create → inspect → approve → apply`
+  with full-content diff previews, SHA-256 tamper detection, strict interactive
+  TTY guard (also with `--confirm-code`), exclusive `.lock` files,
+  `partially_applied` status with `--resume`, and JSONL audit journal
+- **Built-in `macfly mcp` (`stdio`) server** exposing 19 read, context-pack &
+  plan-propose tools with protocol negotiation (up to `2026-07-28`) and MCP tool
+  annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
+- **Agent Skill Export & `launchd` scheduler:** `macfly skill export` and
+  `macfly schedule install` / `list` / `remove`
 
 ## Next Milestones
 

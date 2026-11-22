@@ -25,7 +25,7 @@ steps:
   - run: macfly notes audit
   - wait: 450
   - output:
-      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n  \e[2mNotes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n  \e[2mNext: \e[0m\e[36mmacfly plan create --file reorganize.json\e[0m\r\n\r\n"
+      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n  \e[2mNotes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n  \e[2mNext: \e[0m\e[36mmacfly plan create --input reorganize.json\e[0m\r\n\r\n"
   - wait: 900
   - run: macfly context person "Acme"
   - wait: 450
@@ -72,17 +72,17 @@ steps:
   - output:
       raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n\r\n  \e[2mTotal notes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n\r\n  \e[1;96mSingle-note folders (consolidation candidates):\e[0m\r\n    \e[33m!\e[0m 'Q1 Taxes' (1 note) -> move to '10 · Work / Finance'\r\n    \e[33m!\e[0m 'Rust Ideas' (1 note) -> move to '20 · Engineering'\r\n    \e[2m…and 22 more single-note folders\e[0m\r\n\r\n"
   - wait: 1100
-  - run: macfly plan create --file reorganize-notes.json
+  - run: macfly plan create --input reorganize-notes.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mf47ac10b-58cc-4372-a567-0e02b2c3d479\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718   \e[2mApproval code: \e[0m\e[1;93ma1b2c3\e[0m\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mplan-1795370000-a1b2c3d4\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718   \e[2mApproval code: \e[0m\e[1;93mA1B2C3\e[0m\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
   - wait: 1100
-  - run: macfly plan approve f47ac10b-58cc-4372-a567-0e02b2c3d479 --code a1b2c3
+  - run: macfly plan approve plan-1795370000-a1b2c3d4 --confirm-code A1B2C3
   - wait: 400
   - output:
-      raw: "\e[1;92m✔\e[0m Plan Approved (TTY verified · SHA-256 integrity intact)\r\n\r\n"
+      raw: "\e[1;92m✔\e[0m Plan Approved (interactive TTY verified · SHA-256 intact)\r\n\r\n"
   - wait: 700
-  - run: macfly plan apply f47ac10b-58cc-4372-a567-0e02b2c3d479
+  - run: macfly plan apply plan-1795370000-a1b2c3d4
   - wait: 500
   - output:
       raw: "\e[1;92m✔\e[0m Plan Applied\r\n  \e[2mSucceeded: \e[0m\e[1;92m27\e[0m   \e[2mFailed: \e[0m0   \e[2mJournal: \e[0m~/.local/share/macfly/journal.jsonl\r\n"
@@ -152,10 +152,10 @@ steps:
   - output:
       raw: "Signatures from Apple Mail (Single Point of Truth):\r\n  • 'Corporate Standard' (native Apple Mail signature · 0.24s)\r\n\r\n"
   - wait: 900
-  - run: macfly plan create --file draft-reply.json
+  - run: macfly plan create --input draft-reply.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail.create_draft · send_enabled: false)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)   \e[2mApproval code: \e[0m\e[1;93m9c4a1e\e[0m\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail_create_draft · drafts only)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)   \e[2mApproval code: \e[0m\e[1;93m9C4A1E\e[0m\r\n"
   - wait: 4500
 YAML
 
@@ -172,10 +172,10 @@ steps:
   - output:
       raw: "\e[1;92m✔\e[0m Executive Daily Brief\r\n  \e[2mCalendar (48h): \e[0m\e[36m4\e[0m   \e[2mOpen Tasks: \e[0m\e[1;93m7\e[0m   \e[2mUnread Mail: \e[0m\e[36m3\e[0m   \e[2mRecent Notes: \e[0m12\r\n\r\n"
   - wait: 1000
-  - run: macfly schedule add morning-brief --every-minutes 60 -- context daily-brief
+  - run: macfly schedule install --name morning-brief --task daily-brief --hour 7 --minute 30
   - wait: 450
   - output:
-      raw: "\e[1;92m✔\e[0m LaunchAgent Installed & Loaded\r\n  \e[2mLabel: \e[0mcom.casoon.macfly.morning-brief   \e[2mInterval: \e[0m60m\r\n  \e[2mPlist: \e[0m~/Library/LaunchAgents/com.casoon.macfly.morning-brief.plist\r\n\r\n"
+      raw: "\e[1;92m✔\e[0m LaunchAgent Installed & Loaded\r\n  \e[2mLabel: \e[0mcom.casoon.macfly.morning-brief   \e[2mSchedule: \e[0m07:30 daily\r\n  \e[2mPlist: \e[0m~/Library/LaunchAgents/com.casoon.macfly.morning-brief.plist\r\n\r\n"
   - wait: 1000
   - run: macfly skill export --output ./.claude/skills/macfly
   - wait: 400

@@ -13,7 +13,7 @@ steps:
   - run: macfly notes audit
   - wait: 450
   - output:
-      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n  \e[2mNotes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n  \e[2mNext: \e[0m\e[36mmacfly plan create --file reorganize.json\e[0m\r\n\r\n"
+      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n  \e[2mNotes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n  \e[2mNext: \e[0m\e[36mmacfly plan create --input reorganize.json\e[0m\r\n\r\n"
   - wait: 900
   - run: macfly context person "Acme"
   - wait: 450

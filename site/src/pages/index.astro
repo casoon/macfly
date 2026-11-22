@@ -58,6 +58,17 @@ claude mcp add macfly -- macfly mcp --profile default
 # Optional: export the ready-to-use SKILL.md into your workspace
 macfly skill export --output ./.claude/skills/macfly`;
 
+const mcpCodex = `# Register MacFly in OpenAI Codex CLI
+codex mcp add macfly -- macfly mcp --profile default
+
+# Or add manually to ~/.codex/config.toml:
+# [mcp_servers.macfly]
+# command = "macfly"
+# args = ["mcp", "--profile", "default"]
+
+# Optional: export SKILL.md for Codex
+macfly skill export --output ./.codex/skills/macfly`;
+
 const mcpClaudeDesktop = `// ~/Library/Application Support/Claude/claude_desktop_config.json
 {
   "mcpServers": {
@@ -204,6 +215,7 @@ macfly plan apply <plan-id>`;
       label="Connect your AI client"
       tabs={[
         { id: 'claude-code', label: 'Claude Code' },
+        { id: 'codex', label: 'Codex' },
         { id: 'claude-desktop', label: 'Claude Desktop' },
         { id: 'cursor', label: 'Cursor' },
         { id: 'ollama', label: 'Local Ollama / MLX' },
@@ -211,6 +223,9 @@ macfly plan apply <plan-id>`;
     >
       <div slot="claude-code">
         <CodeBlock code={mcpClaudeCode} lang="sh" title="Claude Code (MCP + SKILL.md)" />
+      </div>
+      <div slot="codex">
+        <CodeBlock code={mcpCodex} lang="sh" title="Codex CLI (MCP + ~/.codex/config.toml)" />
       </div>
       <div slot="claude-desktop">
         <CodeBlock code={mcpClaudeDesktop} lang="json" title="claude_desktop_config.json" />
@@ -228,8 +243,8 @@ macfly plan apply <plan-id>`;
   <Facts
     items={[
       { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
-      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — agents can never self-approve or apply writes' },
-      { value: '0 blind writes', label: 'full-content diff preview, strict TTY approval, execution lock, and resumable plans' },
+      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — over MCP, agents cannot approve or apply writes' },
+      { value: '0 blind writes', label: 'full-content diff preview, strict interactive TTY approval, execution lock, and resumable plans' },
       { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}
   />

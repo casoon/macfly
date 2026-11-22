@@ -27,6 +27,28 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 
 ## MCP client configuration
 
+### Claude Code
+
+```bash
+claude mcp add macfly -- macfly mcp --profile default
+```
+
+### OpenAI Codex CLI
+
+```bash
+codex mcp add macfly -- macfly mcp --profile default
+```
+
+Or add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.macfly]
+command = "macfly"
+args = ["mcp", "--profile", "default"]
+```
+
+### Claude Desktop & Cursor (`mcpServers` JSON)
+
 ```json
 {
   "mcpServers": {

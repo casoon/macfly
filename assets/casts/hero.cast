@@ -35,7 +35,7 @@
 [3.205,"o","i"]
 [3.25,"o","t"]
 [3.295,"o","\r\n"]
-[4.045,"o","\u001b[1;93m⚠\u001b[0m Notes Hygiene Audit (profile: default)\r\n  \u001b[2mNotes: \u001b[0m825   \u001b[2mFolders: \u001b[0m105   \u001b[2mEmpty: \u001b[0m\u001b[1;93m3\u001b[0m   \u001b[2mSingle-note: \u001b[0m\u001b[1;93m24\u001b[0m\r\n  \u001b[2mNext: \u001b[0m\u001b[36mmacfly plan create --file reorganize.json\u001b[0m\r\n\r\n"]
+[4.045,"o","\u001b[1;93m⚠\u001b[0m Notes Hygiene Audit (profile: default)\r\n  \u001b[2mNotes: \u001b[0m825   \u001b[2mFolders: \u001b[0m105   \u001b[2mEmpty: \u001b[0m\u001b[1;93m3\u001b[0m   \u001b[2mSingle-note: \u001b[0m\u001b[1;93m24\u001b[0m\r\n  \u001b[2mNext: \u001b[0m\u001b[36mmacfly plan create --input reorganize.json\u001b[0m\r\n\r\n"]
 [5.245,"o","$ "]
 [5.245,"o","m"]
 [5.29,"o","a"]

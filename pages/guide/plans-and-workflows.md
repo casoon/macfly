@@ -12,12 +12,18 @@ unverified command. Every write follows four explicit steps:
    `plan_hash` and 6-character `approval_code`, sets a TTL (default 15 minutes),
    and writes the plan to `~/.local/share/macfly/plans/` (`0600`).
 2. **Inspect:** `macfly plan inspect <plan-id>` displays risk level,
-   reversibility, hash, and human-readable previews.
-3. **Approve:** `macfly plan approve <plan-id>` requires an interactive TTY and
-   entering the 6-character confirmation code.
-4. **Apply:** `macfly plan apply <plan-id>` re-verifies plan integrity, expiry,
-   and optional note revisions, executes the operations, and appends a full
-   record to `~/.local/share/macfly/journal.jsonl` (`macfly history`).
+   reversibility, hash, and **full-content previews** (complete Apple Mail draft
+   bodies, line-by-line Apple Notes additions, and high-risk Shortcut warnings).
+3. **Approve:** `macfly plan approve <plan-id>` always requires an interactive
+   TTY (even when `--confirm-code` is passed) and confirming the 6-character code.
+4. **Apply (with lock & `--resume`):** `macfly plan apply <plan-id>` acquires an
+   exclusive `.lock` file against duplicate runs, re-verifies plan integrity and
+   optional note revisions, executes operations sequentially while persisting
+   progress after each step, and appends a record to
+   `~/.local/share/macfly/journal.jsonl` (`macfly history`). If a multi-step plan
+   stops mid-way, it is marked `partially_applied` and can be continued cleanly
+   with `macfly plan apply <plan-id> --resume` (note: Apple app mutations are
+   resumable, not full atomic rollbacks).
 
 ## Supported Operations
 
