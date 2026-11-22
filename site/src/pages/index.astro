@@ -26,8 +26,9 @@ const latestRelease = config.changelog
     )
   : undefined;
 
-const quickstartCode = `# 1. Install from crates.io & verify macOS access
-cargo install macfly
+const quickstartCode = `# 1. Install (no Cargo needed) & verify macOS access
+curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
+# or: cargo install macfly
 macfly doctor
 macfly config init
 
@@ -195,7 +196,7 @@ macfly skill export --output ./.claude/skills/macfly`;
     title="Get started in two minutes"
     lead="Install the prebuilt macOS binary (no Rust required) or via crates.io, verify macOS permissions, and audit, automate, or migrate your Apple apps."
     steps={[
-      'Install via shell script (no Cargo): <code>curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash</code> (or <code>cargo install macfly</code>)',
+      'Install via the direct shell installer (no Cargo) or <code>cargo install macfly</code>',
       'Check macOS access &amp; create config: <code>macfly doctor</code> · <code>macfly config init</code>',
       'Audit &amp; clean up: <code>macfly notes audit</code> · <code>macfly contacts audit</code>',
       'Export or import: <code>macfly notes export --output ./backup</code> · <code>macfly notes import --input ./docs --folder "00 · Inbox" --recursive</code>',
