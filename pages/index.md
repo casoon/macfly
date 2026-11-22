@@ -40,6 +40,8 @@ agents (or shell workflows) and your personal macOS data:
   reference for `Plan → Inspect → Approve → Apply` and all supported mutations.
 - **[Cleaning Up Apple Notes](/macfly/docs/guide/cleaning-up-notes/):**
   Structure-agnostic 4-phase field guide & real-world Apple Notes edge cases.
+- **[Apple Shortcuts & Automation](/macfly/docs/guide/shortcuts/):**
+  Allowlist-gated `shortcuts run` for Focus modes, HomeKit scenes, and App Intents.
 - **[MCP & AI Agents](/macfly/docs/guide/mcp-and-agents/):** Connecting
   Claude Desktop, Cursor, Codex, or custom agents safely.
 - **[Why Rust + AppleScript/JXA](/macfly/docs/architecture/rust-and-applescript/):**

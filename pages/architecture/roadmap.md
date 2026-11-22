@@ -17,15 +17,16 @@ order: 3
   read with `untrusted_external` framing, draft creation, mark-read, and move
 - **Apple Calendar & Reminders:** upcoming events, open/overdue reminders, and
   unified 4-app `macfly context daily-brief`
+- **Apple Shortcuts (`macfly shortcuts`):** allowlist-gated bridge to macOS
+  `shortcuts list` / `shortcuts run` via `PlanOperation::ShortcutsRun`
+- **Terminal presentation with `runemark`:** semantic verdicts, reports,
+  error blocks, and `NO_COLOR` support
 - **Transactional plan engine:** `plan create → inspect → approve → apply` with
   SHA-256 tamper detection, interactive TTY guard, and JSONL audit journal
-- **Built-in `macfly mcp` (`stdio`) server** exposing 11 read & plan-propose tools
+- **Built-in `macfly mcp` (`stdio`) server** exposing 12 read & plan-propose tools
 
 ## Next Milestones
 
-- **Generic Apple Shortcuts adapter (`macfly shortcuts`):** Allowlist-gated
-  bridge to macOS `shortcuts run` — enabling Focus modes, HomeKit scenes, and
-  modern App Intents without fragile UI scripting
 - **Privilege Separation (`macfly-broker`):** Separate signed local macOS
   helper holding the TCC permissions over a restricted Unix socket, so AI
   agents can run with zero macOS Automation rights

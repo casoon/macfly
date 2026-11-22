@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::{Config, ProfileConfig};
 use macfly_core::error::MacflyError;
 use macfly_core::plan::{PlanProposal, PlanStore};
@@ -201,6 +202,11 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "shortcuts_list",
+            "description": "Listet verfügbare macOS-Kurzbefehle inkl. Allowlist-Status (`allowed_by_policy`). Ausführung erfolgt nur über `plan_create` (`shortcuts_run`) + menschliche Freigabe.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "plan_create",
             "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus — der Nutzer gibt den Plan separat im Terminal frei.",
             "inputSchema": {
@@ -306,6 +312,10 @@ fn dispatch_tool(
                 .unwrap_or(false);
             let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
             Ok(serde_json::to_value(rem.list(filter, overdue, limit)?)?)
+        }
+        "shortcuts_list" => {
+            let sc = ShortcutsAdapter::new(cfg.script_timeout_secs);
+            Ok(serde_json::to_value(sc.list(profile_name, profile)?)?)
         }
         "plan_create" => {
             let proposal: PlanProposal = serde_json::from_value(args.clone())?;

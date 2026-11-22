@@ -2,7 +2,9 @@ use std::io;
 
 use macfly_adapters::executor::ApplyReport;
 use macfly_core::error::MacflyError;
-use macfly_core::model::{DailyBrief, MailOverview, NotesAuditReport, NotesOverview};
+use macfly_core::model::{
+    DailyBrief, MailOverview, NotesAuditReport, NotesOverview, ShortcutsListResult,
+};
 use macfly_core::plan::{PlanStatus, RiskLevel, StoredPlan};
 use runemark::{
     ColorMode, Console, DetailLevel, ErrorBlock, Finding, FindingGroup, Metric, NextStep, Report,
@@ -458,6 +460,68 @@ pub fn render_daily_brief(brief: &DailyBrief, color: ColorMode) {
             g = g.add_finding(Finding::new(Tone::Warning, w.clone()));
         }
         report = report.add_group(g);
+    }
+
+    print!("{}", report.render(console));
+}
+
+pub fn render_shortcuts_list(res: &ShortcutsListResult, color: ColorMode) {
+    let console = Console::stdout(color);
+    let verdict = if res.allowed_count > 0 {
+        Verdict::Passed
+    } else {
+        Verdict::Info
+    };
+
+    let mut report = Report::new("Apple Shortcuts", verdict)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Profile", &res.profile))
+        .add_metric(Metric::new("Total", res.total.to_string()))
+        .add_metric(
+            Metric::new("Allowed", res.allowed_count.to_string()).with_tone(
+                if res.allowed_count > 0 {
+                    Tone::Success
+                } else {
+                    Tone::Muted
+                },
+            ),
+        );
+
+    let allowed: Vec<&str> = res
+        .shortcuts
+        .iter()
+        .filter(|s| s.allowed_by_policy)
+        .map(|s| s.name.as_str())
+        .collect();
+    if !allowed.is_empty() {
+        let mut g = FindingGroup::new("Allowed by profile").with_total_count(allowed.len());
+        for name in allowed {
+            g = g.add_finding(Finding::new(Tone::Success, name));
+        }
+        report = report.add_group(g);
+    }
+
+    let blocked: Vec<&str> = res
+        .shortcuts
+        .iter()
+        .filter(|s| !s.allowed_by_policy)
+        .map(|s| s.name.as_str())
+        .collect();
+    if !blocked.is_empty() {
+        let mut g = FindingGroup::new("Blocked (not in shortcuts.allow)")
+            .with_advisory(true)
+            .with_total_count(blocked.len());
+        for name in blocked.iter().take(20) {
+            g = g.add_finding(Finding::new(Tone::Muted, *name));
+        }
+        report = report.add_group(g);
+    }
+
+    if res.allowed_count == 0 {
+        report = report.add_next_step(
+            NextStep::new("Add allowed shortcut names to `shortcuts.allow` in config.json")
+                .with_command("macfly config path"),
+        );
     }
 
     print!("{}", report.render(console));

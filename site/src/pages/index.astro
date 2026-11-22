@@ -1,5 +1,16 @@
 ---
-import { Badge, Badges, Facts, Features, Hero, Quickstart, Terminal } from '@casoon/pages-theme/components';
+import {
+  Badge,
+  Badges,
+  Compare,
+  Facts,
+  Features,
+  Flow,
+  Hero,
+  Install,
+  Quickstart,
+  Terminal,
+} from '@casoon/pages-theme/components';
 import Base from '@casoon/pages-theme/layouts/Base.astro';
 import demo from '../macfly-demo.txt?raw';
 ---
@@ -8,19 +19,27 @@ import demo from '../macfly-demo.txt?raw';
   <Hero
     eyebrow="CASOON open source · Rust + AppleScript/JXA"
     title="Safe, deterministic macOS automation."
-    lead="MacFly puts a read-side data firewall and SHA-256 plan approval between AI agents and your Apple Notes, Mail, Calendar, and Reminders — built on a pure Rust core with a thin, stdin-only AppleScript/JXA edge, ready for local LLMs or cloud clients."
+    lead="MacFly puts a read-side data firewall and SHA-256 plan approval between AI agents and your Apple Notes, Mail, Calendar, Reminders, and Shortcuts — built on a pure Rust core with a thin, stdin-only AppleScript/JXA edge, ready for local LLMs or cloud clients."
   >
     <Badges>
-      <Badge>Pure Rust Core</Badge>
-      <Badge>stdin-only JXA</Badge>
-      <Badge>Zero Xcode / SDK Drift</Badge>
+      <Badge>Pure Rust</Badge>
+      <Badge>crates.io</Badge>
+      <Badge>runemark UI</Badge>
       <Badge>DLP Firewall</Badge>
-      <Badge>SHA-256 Plan Approval</Badge>
+      <Badge>SHA-256 Plans</Badge>
       <Badge>MCP stdio</Badge>
       <Badge>MIT / Apache-2.0</Badge>
     </Badges>
-    <Terminal slot="output" title="macfly doctor & plan create" dots ansi={demo} />
+    <Terminal slot="output" title="macfly doctor & plan create · styled with runemark" dots ansi={demo} />
   </Hero>
+
+  <Install
+    commands={[
+      { label: 'Cargo', command: 'cargo install macfly' },
+      { label: 'Verify', command: 'macfly doctor' },
+      { label: 'MCP', command: 'macfly mcp --profile default' },
+    ]}
+  />
 
   <Facts
     items={[
@@ -31,45 +50,115 @@ import demo from '../macfly-demo.txt?raw';
     ]}
   />
 
+  <Flow
+    eyebrow="Safety lifecycle"
+    title="No blind writes — every change goes through four steps"
+    lead="Whether triggered by a local LLM, an MCP client, or a shell script, mutations are validated, hashed, reviewed, and journaled."
+    stages={[
+      {
+        label: 'Step 1',
+        artifact: 'plan.json',
+        title: 'Propose',
+        body: 'An agent or script submits structured operations via CLI or `plan_create` over MCP.',
+      },
+      {
+        label: 'Step 2',
+        artifact: 'sha256 + 0600',
+        title: 'Validate & hash',
+        body: 'Rust checks scopes, allowlists, and revisions, then locks the plan with a SHA-256 hash and TTL.',
+      },
+      {
+        label: 'Step 3',
+        artifact: 'TTY + 6-char code',
+        title: 'Approve',
+        body: 'You review the `runemark` plan report in an interactive terminal and confirm the hash code.',
+      },
+      {
+        label: 'Step 4',
+        artifact: 'journal.jsonl',
+        title: 'Apply & audit',
+        body: 'MacFly verifies integrity pre-flight, executes losslessly, and appends every result to the audit log.',
+      },
+    ]}
+  />
+
   <Features
     heading="Why Rust + AppleScript/JXA — and why security comes first"
     items={[
       {
         title: 'Deterministic core, thin macOS edge',
-        body: 'Policy evaluation, DLP redaction, HTML-to-text normalization, note fidelity checks, canonical SHA-256 plan hashing, and the audit journal all live in pure, memory-safe Rust. The macOS boundary is reduced to small, static JXA scripts fed exclusively via JSON over stdin — easy to maintain across yearly macOS updates and swap out per app.',
+        body: 'Policy evaluation, DLP redaction, HTML normalization, note fidelity checks, SHA-256 plan hashing, and the audit journal live in pure, memory-safe Rust. macOS interaction stays isolated in static stdin-only JXA scripts and official CLI bridges.',
       },
       {
-        title: 'Built for long-term evolution without SDK lock-in',
-        body: 'Because MacFly does not depend on Xcode projects, Node.js runtimes, or undocumented private SQLite formats in its default path, it compiles in seconds with Cargo and keeps working when macOS internals shift. Every adapter is isolated behind a typed contract.',
-      },
-      {
-        title: 'Read-side Data Firewall (DLP) & prompt-injection defense',
-        body: 'Before any note or email reaches an LLM, MacFly enforces profile allowlists and denylists, redacts IBANs, credit cards, API keys, private keys, and 6-digit OTP codes, and wraps external emails as untrusted_external data with explicit anti-injection framing.',
-      },
-      {
-        title: 'Tamper-evident plans: Plan → Inspect → Approve → Apply',
-        body: 'Agents never mutate your apps directly. Every write is validated against profile scopes and note revisions, hashed with SHA-256, stored at 0600, and requires an interactive terminal confirmation code before execution. Every run is logged to a local JSONL audit journal.',
+        title: 'Read-side Data Firewall (DLP) & Local AI ready',
+        body: 'Pair MacFly with local LLMs (Ollama, LM Studio, MLX) so private data never leaves your Mac. When using cloud models, profile denylists, automatic regex redaction (IBAN, API keys, OTPs), and untrusted_external mail framing protect every read.',
       },
       {
         title: 'Fidelity guard for Apple Notes',
-        body: 'Naive script writes silently wipe attachments, tables, checklists, and internal applenotes:// links. MacFly inspects note fidelity before any edit, blocks destructive body replacement on rich notes, and moves notes and whole folder trees losslessly.',
+        body: 'Naive script writes silently wipe attachments, tables, checklists, and applenotes:// links. MacFly inspects note fidelity first, blocks destructive body replacement on rich notes, and moves notes and whole folder trees losslessly.',
       },
       {
-        title: 'Single Point of Truth for Mail, Notes, Calendar & Reminders',
-        body: 'No duplicate IMAP credentials and no second copy of your email footer. MacFly uses your existing Apple Mail accounts, pulls signatures straight from Apple Mail, creates drafts for human review, and combines Mail, Notes, Calendar, and Reminders into one daily-brief context pack.',
+        title: 'Allowlist-gated Apple Shortcuts',
+        body: 'Trigger Focus modes, HomeKit scenes, or modern App Intents via `shortcuts run` without fragile UI scripting. Nothing runs unless explicitly listed in `shortcuts.allow` and approved through a plan.',
+      },
+      {
+        title: 'Single Point of Truth for Apple Mail',
+        body: 'No duplicate IMAP passwords and no second copy of your email footer. MacFly uses your existing Apple Mail accounts, pulls signatures straight from Apple Mail, and creates drafts for human review.',
+      },
+      {
+        title: 'Consistent terminal UX powered by runemark',
+        body: 'Human-readable output uses `runemark` for semantic verdicts, grouped findings, actionable error blocks, and NO_COLOR compliance — while `--format json` and `--format agent` stay pure machine-readable JSON.',
+      },
+    ]}
+  />
+
+  <Compare
+    columns={[
+      { title: 'Cloud OAuth Connectors', label: 'Direct provider integration' },
+      { title: 'MacFly + Local AI', label: 'Local-first on macOS', badge: 'Privacy-first' },
+    ]}
+    highlight={1}
+    rows={[
+      {
+        topic: 'Mail providers',
+        cells: [
+          'Usually Gmail or Microsoft 365 only; separate OAuth setup per account.',
+          '**Every account in Apple Mail** — iCloud, Gmail, Exchange, and any custom IMAP server.',
+        ],
+      },
+      {
+        topic: 'Data residency',
+        cells: [
+          'Emails and notes are transmitted to cloud AI servers.',
+          '**100% local on Apple Silicon** with Ollama/MLX; DLP firewall when using cloud models.',
+        ],
+      },
+      {
+        topic: 'Write & send safety',
+        cells: [
+          'Broad OAuth scopes (`Mail.Send`) exposed to indirect prompt injection.',
+          '**Drafts by default**, SHA-256 plan approval in interactive TTY, MCP read + plan-only.',
+        ],
+      },
+      {
+        topic: 'Signatures & footers',
+        cells: [
+          'Must be duplicated in prompts or connector configs.',
+          '**Single Point of Truth** — pulled directly from Apple Mail.',
+        ],
       },
     ]}
   />
 
   <Quickstart
     title="Get started in two minutes"
-    lead="One Rust binary, one central config file, zero external runtimes."
+    lead="Install from crates.io, verify macOS permissions, and inspect your Notes, Mail, Calendar, Reminders, and Shortcuts."
     steps={[
-      'Build: cargo build --release',
+      'Install: cargo install macfly',
       'Check macOS access: macfly doctor',
-      'Create single-point-of-truth config: macfly config init (~/.config/macfly/config.json)',
-      'Inspect & audit: macfly notes overview · macfly notes audit · macfly mail overview · macfly context daily-brief',
-      'Connect any MCP client: point stdio to `macfly mcp --profile default` (read + plan-create only)',
+      'Create central config: macfly config init (~/.config/macfly/config.json)',
+      'Audit & inspect: macfly notes audit · macfly mail overview · macfly shortcuts list · macfly context daily-brief',
+      'Connect an MCP client: point stdio to `macfly mcp --profile default`',
     ]}
   />
 </Base>

@@ -85,6 +85,11 @@ pub enum PlanOperation {
         from_mailbox: String,
         to_mailbox: String,
     },
+    ShortcutsRun {
+        name: String,
+        #[serde(default)]
+        input: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -144,13 +149,14 @@ impl PlanOperation {
             | Self::NotesMove { .. }
             | Self::NotesMoveFolderContents { .. }
             | Self::NotesDeleteEmptyFolder { .. }
-            | Self::MailMove { .. } => RiskLevel::Medium,
+            | Self::MailMove { .. }
+            | Self::ShortcutsRun { .. } => RiskLevel::Medium,
         }
     }
 
     pub fn reversibility(&self) -> Reversibility {
         match self {
-            Self::NotesAppend { .. } => Reversibility::BestEffort,
+            Self::NotesAppend { .. } | Self::ShortcutsRun { .. } => Reversibility::BestEffort,
             _ => Reversibility::Reversible,
         }
     }
@@ -235,6 +241,10 @@ impl PlanOperation {
                 "[mail.move] Mail '{}' von '{}' → '{}'",
                 local_id, from_mailbox, to_mailbox
             ),
+            Self::ShortcutsRun { name, input } => match input {
+                Some(_) => format!("[shortcuts.run] Kurzbefehl '{name}' (mit Eingabe) ausführen"),
+                None => format!("[shortcuts.run] Kurzbefehl '{name}' ausführen"),
+            },
         }
     }
 
@@ -358,6 +368,13 @@ impl PlanOperation {
                 {
                     return Err(MacflyError::ScopeDenied(format!(
                         "Mail-Verschiebung in '{account}' im Profil '{profile_name}' gesperrt"
+                    )));
+                }
+            }
+            Self::ShortcutsRun { name, .. } => {
+                if !profile.shortcuts.is_allowed(name) {
+                    return Err(MacflyError::ScopeDenied(format!(
+                        "Kurzbefehl '{name}' ist im Profil '{profile_name}' nicht in `shortcuts.allow` freigegeben"
                     )));
                 }
             }
@@ -641,5 +658,28 @@ mod tests {
         };
         let err = store.create("default", &profile, proposal, 600).unwrap_err();
         assert_eq!(err.code(), "SCOPE_DENIED");
+    }
+
+    #[test]
+    fn shortcuts_run_requires_explicit_allowlist() {
+        let store = temp_store("shortcuts");
+        let mut profile = ProfileConfig::default();
+        let proposal = PlanProposal {
+            schema_version: "1.0".to_string(),
+            summary: Some("Fokus-Szene".to_string()),
+            operations: vec![PlanOperation::ShortcutsRun {
+                name: "Office Focus".to_string(),
+                input: None,
+            }],
+        };
+
+        let err = store
+            .create("default", &profile, proposal.clone(), 600)
+            .unwrap_err();
+        assert_eq!(err.code(), "SCOPE_DENIED");
+
+        profile.shortcuts.allow.push("Office Focus".to_string());
+        let ok = store.create("default", &profile, proposal, 600).unwrap();
+        assert_eq!(ok.risk_level, RiskLevel::Medium);
     }
 }

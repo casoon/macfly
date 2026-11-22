@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::mail::MailAdapter;
 use crate::notes::NotesAdapter;
+use crate::shortcuts::ShortcutsAdapter;
 
 #[derive(Debug, Serialize)]
 pub struct ApplyReport {
@@ -48,6 +49,7 @@ pub fn apply_approved_plan(
 
     let notes = NotesAdapter::new(timeout_secs);
     let mail = MailAdapter::new(timeout_secs);
+    let shortcuts = ShortcutsAdapter::new(timeout_secs);
     let mut results = Vec::new();
 
     for op in &plan.operations {
@@ -63,6 +65,9 @@ pub fn apply_approved_plan(
             PlanOperation::MailCreateDraft { .. }
             | PlanOperation::MailMarkRead { .. }
             | PlanOperation::MailMove { .. } => mail.execute_operation(profile, op),
+            PlanOperation::ShortcutsRun { name, input } => {
+                shortcuts.run(profile_name, profile, name, input.as_deref())
+            }
         };
 
         match outcome {

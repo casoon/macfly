@@ -11,6 +11,7 @@ use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::Config;
 use macfly_core::error::MacflyError;
 use macfly_core::journal::AuditJournal;
@@ -98,6 +99,11 @@ enum Commands {
     Reminders {
         #[command(subcommand)]
         action: RemindersAction,
+    },
+    /// Apple Shortcuts (Kurzbefehle) einsehen (Ausführung nur über allowlist-geprüften Plan)
+    Shortcuts {
+        #[command(subcommand)]
+        action: ShortcutsAction,
     },
     /// Transaktionale Änderungspläne (Plan → Inspect → Approve → Apply)
     Plan {
@@ -236,6 +242,12 @@ enum RemindersAction {
 }
 
 #[derive(Subcommand)]
+enum ShortcutsAction {
+    /// Verfügbare macOS-Kurzbefehle inkl. Allowlist-Status anzeigen
+    List,
+}
+
+#[derive(Subcommand)]
 enum PlanAction {
     /// Erstellt einen geprüften Änderungsplan aus JSON-Datei oder stdin
     Create {
@@ -314,6 +326,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Mail { action } => handle_mail(cli, action),
         Commands::Calendar { action } => handle_calendar(cli, action),
         Commands::Reminders { action } => handle_reminders(cli, action),
+        Commands::Shortcuts { action } => handle_shortcuts(cli, action),
         Commands::Plan { action } => handle_plan(cli, action),
         Commands::Context { action } => handle_context(cli, action),
         Commands::History { limit } => handle_history(cli, *limit),
@@ -831,6 +844,22 @@ fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyErr
                         println!("  {flag} {due}  [{}]  {}", r.list, r.title);
                     }
                 }
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+    }
+}
+
+fn handle_shortcuts(cli: &Cli, action: &ShortcutsAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+    let adapter = ShortcutsAdapter::new(cfg.script_timeout_secs);
+    match action {
+        ShortcutsAction::List => {
+            let res = adapter.list(profile_name, profile)?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_shortcuts_list(&res, cli.color.into()),
                 _ => emit_json(cli.format, &res)?,
             }
             Ok(())

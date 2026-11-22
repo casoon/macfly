@@ -38,7 +38,7 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 }
 ```
 
-## Available MCP tools (11 total)
+## Available MCP tools (12 total)
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -51,6 +51,7 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 | `mail_read` | Read | Cleaned mail body + DLP redaction + `untrusted_external` framing |
 | `calendar_events` | Read | Upcoming events for the next N days |
 | `reminders_list` | Read | Open or overdue reminders |
+| `shortcuts_list` | Read | Available macOS Shortcuts & allowlist status |
 | `plan_create` | Propose | Validate and store a proposed change plan (no execution) |
 | `plan_inspect` | Read | Inspect status, hash, and preview of a stored plan |
 

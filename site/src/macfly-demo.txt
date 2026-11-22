@@ -1,22 +1,22 @@
-$ macfly doctor
-MacFly Doctor
-  OS:             macos
-  osascript:      OK
-  Config:         ~/.config/macfly/config.json (loaded)
-  Profile:        default
-  Apple Notes:    ok (1 account, 240 notes)
-  Apple Mail:     ok (2 accounts, 14 unread, 2 signatures)
+[2m$ macfly doctor[0m
+[1;32m✓ MacFly Doctor[0m
 
-$ macfly plan create --input cleanup.json
-Plan created:     plan-1763812400-8f4a21c0
-  Risk:           Medium (Reversible)
-  Hash:           sha256:8f4a21c09e...
-  Approval code:  8F4A21
+  [2mOS:[0m macos   [2mosascript:[0m [32mOK[0m   [2mConfig:[0m ~/.config/macfly/config.json (loaded)   [2mProfile:[0m default
 
-Operations:
-  • [notes.move] Note 'Q4 Roadmap' → folder '10 · Work/Projects'
-  • [notes.delete_empty_folder] Remove empty folder 'Old Scratchpad'
-  • [mail.create_draft] Draft to team@example.org (signature: Apple Mail)
+[1m• macOS Adapters (2)[0m
+  [32m✓[0m Apple Notes: ok (1 account, 240 notes)
+  [32m✓[0m Apple Mail: ok (2 accounts, 14 unread, 2 signatures)
 
-Next step (interactive TTY required):
-  macfly plan approve plan-1763812400-8f4a21c0
+[2m$ macfly plan create --input cleanup.json[0m
+[1;33m! Change Plan plan-1795352400-8f4a21c0[0m
+
+  [2mStatus:[0m PendingApproval   [2mRisk:[0m [33mMedium[0m   [2mApproval code:[0m [1;33m8F4A21[0m
+
+[1m• Planned operations (3)[0m
+  [36m•[0m [notes.move] Note 'Q4 Roadmap' → '10 · Work/Projects'
+  [36m•[0m [mail.create_draft] Draft to team@example.org (Apple Mail signature)
+  [36m•[0m [shortcuts.run] Shortcut 'Office Focus' (allowlisted)
+
+[1mNext steps:[0m
+  - Review and approve interactively
+    [36m$ macfly plan approve plan-1795352400-8f4a21c0[0m

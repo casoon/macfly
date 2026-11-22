@@ -209,6 +209,23 @@ pub struct ReminderItem {
     pub priority: u8,
 }
 
+// ---------- Apple Shortcuts ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShortcutSummary {
+    pub name: String,
+    pub allowed_by_policy: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShortcutsListResult {
+    pub schema_version: String,
+    pub profile: String,
+    pub total: usize,
+    pub allowed_count: usize,
+    pub shortcuts: Vec<ShortcutSummary>,
+}
+
 // ---------- Context Packs ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

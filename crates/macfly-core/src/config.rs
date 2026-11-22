@@ -26,7 +26,22 @@ pub struct ProfileConfig {
     #[serde(default)]
     pub mail: MailScopeConfig,
     #[serde(default)]
+    pub shortcuts: ShortcutsScopeConfig,
+    #[serde(default)]
     pub dlp: DlpConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ShortcutsScopeConfig {
+    /// Explizite Allowlist freigegebener macOS-Kurzbefehle (Default: leer = alle gesperrt).
+    #[serde(default)]
+    pub allow: Vec<String>,
+}
+
+impl ShortcutsScopeConfig {
+    pub fn is_allowed(&self, name: &str) -> bool {
+        self.allow.iter().any(|a| a.eq_ignore_ascii_case(name))
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -107,6 +122,7 @@ impl Default for ProfileConfig {
                 skip_password_protected: true,
             },
             mail: MailScopeConfig::default(),
+            shortcuts: ShortcutsScopeConfig::default(),
             dlp: DlpConfig::default(),
         }
     }
