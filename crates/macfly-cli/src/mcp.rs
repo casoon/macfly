@@ -1,6 +1,7 @@
 use std::io::{self, BufRead, Write};
 
 use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
+use macfly_adapters::contacts::ContactsAdapter;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::shortcuts::ShortcutsAdapter;
@@ -207,6 +208,22 @@ fn tool_definitions() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "contacts_search",
+            "description": "Sucht oder listet Kontakte aus Apple Contacts (Name, Firma, E-Mails, Telefonnummern).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "limit": { "type": "integer", "default": 50 }
+                }
+            }
+        },
+        {
+            "name": "contacts_audit",
+            "description": "Prüft Apple Contacts auf doppelte Namen, doppelte E-Mail-Adressen und Kontakte ohne E-Mail/Telefon.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "plan_create",
             "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus — der Nutzer gibt den Plan separat im Terminal frei.",
             "inputSchema": {
@@ -316,6 +333,16 @@ fn dispatch_tool(
         "shortcuts_list" => {
             let sc = ShortcutsAdapter::new(cfg.script_timeout_secs);
             Ok(serde_json::to_value(sc.list(profile_name, profile)?)?)
+        }
+        "contacts_search" => {
+            let ct = ContactsAdapter::new(cfg.script_timeout_secs);
+            let query = args.get("query").and_then(Value::as_str);
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+            Ok(serde_json::to_value(ct.list(query, limit)?)?)
+        }
+        "contacts_audit" => {
+            let ct = ContactsAdapter::new(cfg.script_timeout_secs);
+            Ok(serde_json::to_value(ct.audit()?)?)
         }
         "plan_create" => {
             let proposal: PlanProposal = serde_json::from_value(args.clone())?;

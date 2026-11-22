@@ -226,6 +226,35 @@ pub struct ShortcutsListResult {
     pub shortcuts: Vec<ShortcutSummary>,
 }
 
+// ---------- Apple Contacts ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactSummary {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization: Option<String>,
+    pub emails: Vec<String>,
+    pub phones: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactsListResult {
+    pub schema_version: String,
+    pub total_matched: usize,
+    pub returned: usize,
+    pub contacts: Vec<ContactSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactsAuditReport {
+    pub schema_version: String,
+    pub total_contacts: usize,
+    pub duplicate_names: BTreeMap<String, usize>,
+    pub duplicate_emails: BTreeMap<String, Vec<String>>,
+    pub empty_contacts: Vec<ContactSummary>,
+}
+
 // ---------- Context Packs ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,7 +3,8 @@ use std::io;
 use macfly_adapters::executor::ApplyReport;
 use macfly_core::error::MacflyError;
 use macfly_core::model::{
-    DailyBrief, MailOverview, NotesAuditReport, NotesOverview, ShortcutsListResult,
+    ContactsAuditReport, DailyBrief, MailOverview, NotesAuditReport, NotesOverview,
+    ShortcutsListResult,
 };
 use macfly_core::plan::{PlanStatus, RiskLevel, StoredPlan};
 use runemark::{
@@ -522,6 +523,76 @@ pub fn render_shortcuts_list(res: &ShortcutsListResult, color: ColorMode) {
             NextStep::new("Add allowed shortcut names to `shortcuts.allow` in config.json")
                 .with_command("macfly config path"),
         );
+    }
+
+    print!("{}", report.render(console));
+}
+
+pub fn render_contacts_audit(rep: &ContactsAuditReport, detailed: bool, color: ColorMode) {
+    let console = Console::stdout(color);
+    let has_findings = !rep.duplicate_names.is_empty()
+        || !rep.duplicate_emails.is_empty()
+        || !rep.empty_contacts.is_empty();
+    let verdict = if has_findings {
+        Verdict::Warning
+    } else {
+        Verdict::Passed
+    };
+
+    let mut report = Report::new("Apple Contacts Audit", verdict)
+        .with_detail_level(if detailed {
+            DetailLevel::Detailed
+        } else {
+            DetailLevel::Compact
+        })
+        .with_details_hint(if detailed {
+            None
+        } else {
+            Some("Run `macfly contacts audit --details` to list all items.".to_string())
+        })
+        .add_metric(Metric::new("Total contacts", rep.total_contacts.to_string()))
+        .add_metric(Metric::new(
+            "Duplicate names",
+            rep.duplicate_names.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Duplicate emails",
+            rep.duplicate_emails.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Without email & phone",
+            rep.empty_contacts.len().to_string(),
+        ));
+
+    if !rep.duplicate_names.is_empty() {
+        let mut g =
+            FindingGroup::new("Duplicate contact names").with_total_count(rep.duplicate_names.len());
+        for (name, count) in &rep.duplicate_names {
+            g = g.add_finding(Finding::new(Tone::Warning, format!("'{name}' ({count}x)")));
+        }
+        report = report.add_group(g);
+    }
+
+    if !rep.duplicate_emails.is_empty() {
+        let mut g = FindingGroup::new("Shared/duplicate email addresses")
+            .with_total_count(rep.duplicate_emails.len());
+        for (email, names) in &rep.duplicate_emails {
+            g = g.add_finding(Finding::new(
+                Tone::Warning,
+                format!("{email}: {}", names.join(", ")),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !rep.empty_contacts.is_empty() {
+        let mut g = FindingGroup::new("Contacts without email or phone")
+            .with_advisory(true)
+            .with_total_count(rep.empty_contacts.len());
+        for c in &rep.empty_contacts {
+            g = g.add_finding(Finding::new(Tone::Info, format!("{} [id: {}]", c.name, c.id)));
+        }
+        report = report.add_group(g);
     }
 
     print!("{}", report.render(console));

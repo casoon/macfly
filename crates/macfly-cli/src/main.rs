@@ -8,6 +8,7 @@ use std::process::{Command, ExitCode};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
+use macfly_adapters::contacts::ContactsAdapter;
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
@@ -104,6 +105,11 @@ enum Commands {
     Shortcuts {
         #[command(subcommand)]
         action: ShortcutsAction,
+    },
+    /// Apple Contacts (Kontakte) durchsuchen, auditieren und exportieren
+    Contacts {
+        #[command(subcommand)]
+        action: ContactsAction,
     },
     /// Transaktionale Änderungspläne (Plan → Inspect → Approve → Apply)
     Plan {
@@ -287,6 +293,35 @@ enum ShortcutsAction {
 }
 
 #[derive(Subcommand)]
+enum ContactsAction {
+    /// Kontakte auflisten
+    List {
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
+    /// Kontakte nach Name, Firma, E-Mail oder Telefon suchen
+    Search {
+        query: String,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
+    /// Aufräum-Audit: doppelte Namen, doppelte E-Mails, Kontakte ohne E-Mail/Telefon
+    Audit {
+        #[arg(long)]
+        details: bool,
+    },
+    /// Exportiert Kontakte als Markdown-Steckbriefe (mit YAML-Frontmatter) in ein Verzeichnis
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
 enum PlanAction {
     /// Erstellt einen geprüften Änderungsplan aus JSON-Datei oder stdin
     Create {
@@ -366,6 +401,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Calendar { action } => handle_calendar(cli, action),
         Commands::Reminders { action } => handle_reminders(cli, action),
         Commands::Shortcuts { action } => handle_shortcuts(cli, action),
+        Commands::Contacts { action } => handle_contacts(cli, action),
         Commands::Plan { action } => handle_plan(cli, action),
         Commands::Context { action } => handle_context(cli, action),
         Commands::History { limit } => handle_history(cli, *limit),
@@ -1091,6 +1127,99 @@ fn handle_shortcuts(cli: &Cli, action: &ShortcutsAction) -> Result<(), MacflyErr
             Ok(())
         }
     }
+}
+
+fn handle_contacts(cli: &Cli, action: &ContactsAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let adapter = ContactsAdapter::new(cfg.script_timeout_secs);
+    match action {
+        ContactsAction::List { limit } => {
+            let res = adapter.list(None, *limit)?;
+            print_contacts_list(cli.format, &res)
+        }
+        ContactsAction::Search { query, limit } => {
+            let res = adapter.list(Some(query), *limit)?;
+            print_contacts_list(cli.format, &res)
+        }
+        ContactsAction::Audit { details } => {
+            let rep = adapter.audit()?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_contacts_audit(&rep, *details, cli.color.into()),
+                _ => emit_json(cli.format, &rep)?,
+            }
+            Ok(())
+        }
+        ContactsAction::Export {
+            output,
+            query,
+            limit,
+        } => {
+            let res = adapter.list(query.as_deref(), *limit)?;
+            fs::create_dir_all(output)?;
+            let mut exported_files = Vec::new();
+            for c in &res.contacts {
+                let fname = format!("{}.md", sanitize_filename(&c.name));
+                let file_path = output.join(fname);
+                let md = format!(
+                    "---\nname: {:?}\norganization: {:?}\nemails: {:?}\nphones: {:?}\nid: {:?}\n---\n\n# {}\n",
+                    c.name,
+                    c.organization.clone().unwrap_or_default(),
+                    c.emails,
+                    c.phones,
+                    c.id,
+                    c.name
+                );
+                fs::write(&file_path, md)?;
+                exported_files.push(file_path.display().to_string());
+            }
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!(
+                        "{} Kontakt(e) als Markdown exportiert nach: {}",
+                        exported_files.len(),
+                        output.display()
+                    );
+                }
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output_dir": output.display().to_string(),
+                        "exported_count": exported_files.len(),
+                        "files": exported_files,
+                    }),
+                )?,
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_contacts_list(
+    format: OutputFormat,
+    res: &macfly_core::model::ContactsListResult,
+) -> Result<(), MacflyError> {
+    match format {
+        OutputFormat::Pretty => {
+            println!(
+                "Kontakte: {} angezeigt (von {} Treffern)",
+                res.returned, res.total_matched
+            );
+            println!();
+            for c in &res.contacts {
+                let org = c
+                    .organization
+                    .as_deref()
+                    .map(|o| format!(" ({o})"))
+                    .unwrap_or_default();
+                let mail = c.emails.first().map(String::as_str).unwrap_or("—");
+                let phone = c.phones.first().map(String::as_str).unwrap_or("—");
+                println!("  • {}{}  |  {}  |  {}", c.name, org, mail, phone);
+            }
+        }
+        _ => emit_json(format, res)?,
+    }
+    Ok(())
 }
 
 fn handle_context(cli: &Cli, action: &ContextAction) -> Result<(), MacflyError> {
