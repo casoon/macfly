@@ -38,7 +38,7 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 }
 ```
 
-## Available MCP tools (12 total)
+## Available MCP tools (15 total)
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -49,8 +49,11 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 | `mail_overview` | Read | Accounts, mailboxes (unread counts), Apple Mail signatures |
 | `mail_list` | Read | Filterable/searchable inbox & mailbox messages |
 | `mail_read` | Read | Cleaned mail body + DLP redaction + `untrusted_external` framing |
+| `contacts_search` | Read | Search or list Apple Contacts (name, org, emails, phones) |
+| `contacts_audit` | Read | Duplicate names, shared emails, and contacts without email/phone |
 | `calendar_events` | Read | Upcoming events for the next N days |
 | `reminders_list` | Read | Open or overdue reminders |
+| `safari_tabs` | Read | Currently open Safari browser tabs (title & URL) |
 | `shortcuts_list` | Read | Available macOS Shortcuts & allowlist status |
 | `plan_create` | Propose | Validate and store a proposed change plan (no execution) |
 | `plan_inspect` | Read | Inspect status, hash, and preview of a stored plan |

@@ -38,6 +38,8 @@ agents (or shell workflows) and your personal macOS data:
   permissions, config schema, and everyday CLI commands.
 - **[Plans & Workflows](/macfly/docs/guide/plans-and-workflows/):** Full
   reference for `Plan → Inspect → Approve → Apply` and all supported mutations.
+- **[Migrations & Backups](/macfly/docs/guide/migrations/):** Two-way
+  pipelines between Apple apps and Markdown, CSV, JSON, JSONL, and HTML.
 - **[Cleaning Up Apple Notes](/macfly/docs/guide/cleaning-up-notes/):**
   Structure-agnostic 4-phase field guide & real-world Apple Notes edge cases.
 - **[Apple Shortcuts & Automation](/macfly/docs/guide/shortcuts/):**
