@@ -10,8 +10,8 @@ steps:
   - output:
       raw: "\e[1;92m✔\e[0m 360° Person & Project Dossier: 'Acme'\r\n\r\n  \e[2mTotal hits: \e[0m\e[36m14\e[0m   \e[2mContacts: \e[0m2   \e[2mNotes: \e[0m5   \e[2mMail: \e[0m4   \e[2mCalendar: \e[0m2   \e[2mTasks: \e[0m1\r\n\r\n  \e[1;96mMatching Contacts (2):\e[0m\r\n    \e[36mℹ\e[0m Alex Rivera (Acme GmbH) · alex@acme.example · +49 30 5550192\r\n  \e[1;96mMatching Apple Notes (5):\e[0m\r\n    \e[36mℹ\e[0m [10 · Work] Acme Architecture & SLA Review (2026-11-18)\r\n  \e[1;96mRecent Emails (4):\e[0m\r\n    \e[36mℹ\e[0m [Exchange] Q4 Contract & Billing IBAN [REDACTED:IBAN] (2026-11-20)\r\n\r\n"
   - wait: 1200
-  - run: macfly report person "Acme" --output ./dossier-acme.typ
-  - wait: 450
+  - run: macfly report person "Acme" --output ./dossier-acme.pdf
+  - wait: 500
   - output:
-      raw: "\e[1;92m✔\e[0m Report Dossier Exported\r\n  \e[2mFormat: \e[0mTypst (.typ)   \e[2mPath: \e[0m./dossier-acme.typ\r\n  \e[2mNext: \e[0m\e[36mtypst compile ./dossier-acme.typ ./dossier-acme.pdf\e[0m\r\n"
+      raw: "\e[1;92m✔\e[0m PDF Dossier Compiled (via Typst)\r\n  \e[2mPDF: \e[0m./dossier-acme.pdf   \e[2mSource: \e[0m./dossier-acme.typ\r\n  \e[2mTip: \e[0mUse --output .typ for renderreport or --output .md for Markdown\r\n"
   - wait: 4500

@@ -1,5 +1,4 @@
 import { ansiToHtml } from '@casoon/pages-theme/ansi';
-import type { ShowcaseExample } from '@casoon/pages-theme/showcase';
 
 // Deterministic castwright recordings built by assets/casts/build.sh.
 // Each recording compiles to an animated SVG (zero script, works on GitHub and in pages)
@@ -45,8 +44,6 @@ function castText(name: string): string {
 const escapeAttr = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-// Scoped to .cw-demo. Animated SVG has no JS pause of its own, so the CSS-only checkbox swaps
-// it for the real ANSI-to-HTML text version (WCAG 2.2.2); reduced motion shows text immediately.
 const style = `<style>
 .cw-demo{position:relative;margin:0;overflow:hidden;border:1px solid var(--border);border-radius:14px;background:var(--term-bg);color:var(--term-text)}
 .cw-demo figcaption{padding:10px 16px;border-bottom:1px solid var(--term-border);color:var(--term-dim);font-family:var(--font-mono);font-size:12px}
@@ -88,81 +85,3 @@ export function castDemo(name: string, id: string, caption?: string, narrow?: st
     `<div class="cw-controls"><input type="checkbox" class="cw-toggle" id="${id}"><label for="${id}">Stop animation, show as text</label></div></figure>`
   );
 }
-
-const examples_: Array<{
-  slug: string;
-  group: string;
-  title: string;
-  description: string;
-  demo: string;
-  command: string;
-  tags: string[];
-}> = [
-  {
-    slug: 'notes-reorganization',
-    group: 'Notes & Contacts Hygiene',
-    title: 'Safe Apple Notes reorganization',
-    description:
-      'Audit a sprawling Apple Notes library, lock the folder moves behind a SHA-256 plan with Note Fidelity Guard, approve in an interactive TTY, and apply losslessly.',
-    demo: 'notes-cleanup',
-    command: `macfly notes audit
-macfly plan create --file reorganize-notes.json
-macfly plan approve f47ac10b-58cc-4372-a567-0e02b2c3d479 --code a1b2c3
-macfly plan apply f47ac10b-58cc-4372-a567-0e02b2c3d479`,
-    tags: ['notes', 'audit', 'sha256-plan', 'fidelity-guard'],
-  },
-  {
-    slug: 'multi-format-migration',
-    group: 'Two-Way Migrations',
-    title: 'Obsidian, Notion & CSV ⇄ Apple Notes & Reminders',
-    description:
-      'Import Markdown, HTML, JSON, JSONL, or RFC-4180 CSV exports into Apple Notes and Reminders via hash-locked plans, or export Apple Notes trees into clean Git-ready Markdown.',
-    demo: 'migration-import',
-    command: `macfly notes import --input ./obsidian-vault --folder "00 · Inbox" --recursive
-macfly reminders import --input ./todoist-tasks.csv --list "Work"
-macfly notes export --output ./git-knowledge-base --folder "10 · Work"`,
-    tags: ['migration', 'markdown', 'csv', 'obsidian', 'backup'],
-  },
-  {
-    slug: 'client-dossier-report',
-    group: '360° Context & PDF Reports',
-    title: '360° Client Dossier & Typst PDF Report',
-    description:
-      'Correlate Contacts, Apple Notes, Apple Mail, Calendar, and Reminders for a person or project in one command and export a ready-to-compile Typst (.typ) dossier for renderreport.',
-    demo: 'context-dossier',
-    command: `macfly context person "Acme"
-macfly report person "Acme" --output ./dossier-acme.typ`,
-    tags: ['context-pack', 'dossier', 'typst', 'renderreport'],
-  },
-  {
-    slug: 'dlp-mail-triage',
-    group: 'DLP Firewall, Plans & Agents',
-    title: 'Read-side DLP firewall & native Apple Mail drafts',
-    description:
-      'Search across Exchange, iCloud, and Gmail with automatic IBAN and API-key redaction, untrusted_external framing, native Apple Mail signatures, and drafts-by-default safety.',
-    demo: 'dlp-mail-triage',
-    command: `macfly mail search --query "Invoice" --limit 2
-macfly mail signatures
-macfly plan create --file draft-reply.json`,
-    tags: ['mail', 'dlp', 'privacy', 'drafts'],
-  },
-  {
-    slug: 'daily-brief-and-launchd',
-    group: 'DLP Firewall, Plans & Agents',
-    title: 'Daily Executive Brief, launchd schedule & SKILL.md',
-    description:
-      'Combine morning briefings, native macOS launchd automation, and a generated SKILL.md so coding agents use MacFly safely without cloud connectors.',
-    demo: 'daily-automation',
-    command: `macfly context daily-brief
-macfly schedule add morning-brief --every-minutes 60 -- context daily-brief
-macfly skill export --output ./.claude/skills/macfly`,
-    tags: ['daily-brief', 'launchd', 'skill', 'mcp'],
-  },
-];
-
-export const examples: ShowcaseExample[] = examples_.map(({ demo, command, ...meta }) => ({
-  ...meta,
-  file: `assets/casts/${demo}.terminal.yaml`,
-  input: { code: command, lang: 'sh' },
-  output: { html: castDemo(demo, `cw-${meta.slug}`), kind: 'panel' },
-}));

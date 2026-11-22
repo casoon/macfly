@@ -1,139 +1,508 @@
 ---
-import { Button, Callout, CodeBlock } from '@casoon/pages-theme/components';
+import { Button, Callout, CodeBlock, Tabs } from '@casoon/pages-theme/components';
 import Base from '@casoon/pages-theme/layouts/Base.astro';
 import { url } from '@casoon/pages-theme/url';
-import { castDemo, castYaml } from '../showcase';
+import { castDemo } from '../casts';
 
-const useCases = [
-  {
-    id: 'notes-cleanup',
-    eyebrow: 'Use Case 1 · Hygiene & Reorganization',
-    title: 'Clean up a sprawling Apple Notes library without losing attachments',
-    summary:
-      'Over years of use, Apple Notes accumulates dozens of single-note folders, empty folders, and duplicate titles. MacFly audits the structure, lets an AI agent or script propose a clean 00–90 taxonomy, protects notes containing tables, checklists, or attachments with its Fidelity Guard, and only executes after you confirm the SHA-256 approval code in an interactive terminal.',
-    demo: 'notes-cleanup',
-    caption: 'macfly notes audit → plan create → approve → apply',
-    docHref: url('docs/guide/cleaning-up-notes/'),
-    docLabel: 'Notes cleanup guide',
-  },
-  {
-    id: 'migration',
-    eyebrow: 'Use Case 2 · Two-Way Migrations',
-    title: 'Migrate between Obsidian, Notion, CSV and Apple Notes & Reminders',
-    summary:
-      'Move knowledge bases and task lists in either direction without vendor lock-in. Export Apple Notes trees, emails, contacts, calendar events, and open Safari tabs into clean Markdown with YAML frontmatter for Git backups — or import `.md`, `.txt`, `.html`, `.json`, `.jsonl`, and RFC-4180 `.csv` files safely through hash-locked plans.',
-    demo: 'migration-import',
-    caption: 'macfly notes import · reminders import · notes export',
-    docHref: url('docs/guide/migrations/'),
-    docLabel: 'Migrations guide',
-  },
-  {
-    id: 'dossier',
-    eyebrow: 'Use Case 3 · 360° Cross-App Context',
-    title: 'Generate a 360° client dossier and Typst PDF report in seconds',
-    summary:
-      'Before a client call or review, `macfly context person` correlates matching Contacts, Apple Notes, Apple Mail threads across every configured account, upcoming Calendar meetings, and open Reminders into one DLP-filtered view. Pipe it straight into `macfly report person --output dossier.typ` to compile a clean PDF with Typst or renderreport.',
-    demo: 'context-dossier',
-    caption: 'macfly context person "Acme" → macfly report person',
-    docHref: url('docs/guide/plans-and-workflows/'),
-    docLabel: 'Plans & workflows',
-  },
-  {
-    id: 'mail-triage',
-    eyebrow: 'Use Case 4 · Privacy-First AI Triage',
-    title: 'Triage Apple Mail with a local LLM and a read-side DLP firewall',
-    summary:
-      'Instead of granting broad cloud OAuth scopes (`Mail.Send`) to third-party SaaS connectors, route reads through MacFly. IBANs, API keys, private keys, and OTPs are automatically redacted in Rust before any model sees them, external emails are tagged `untrusted_external`, signatures stay in Apple Mail as Single Point of Truth, and replies are created as drafts only.',
-    demo: 'dlp-mail-triage',
-    caption: 'macfly mail search (DLP) → signatures → safe draft plan',
-    docHref: url('docs/architecture/security-model/'),
-    docLabel: 'Security model & DLP',
-  },
-  {
-    id: 'automation',
-    eyebrow: 'Use Case 5 · Daily Routines & Coding Agents',
-    title: 'Schedule local briefings with launchd and export an Agent SKILL.md',
-    summary:
-      'Run `macfly context daily-brief` on a native macOS `launchd` schedule without background daemons or cloud cron jobs, and export a tailored `SKILL.md` (`macfly skill export`) so Claude Code, Codex, Cursor, or Gemini CLI immediately know how to query your macOS apps safely over `macfly mcp`.',
-    demo: 'daily-automation',
-    caption: 'macfly context daily-brief · schedule add · skill export',
-    docHref: url('docs/guide/mcp-and-agents/'),
-    docLabel: 'MCP & AI agents',
-  },
-];
+const reorganizePlanJson = `{
+  "summary": "Consolidate 24 single-note folders into 00–90 taxonomy",
+  "operations": [
+    {
+      "kind": "notes.move_note",
+      "note_id": "x-coredata://.../ICNote/p1042",
+      "target_folder": "10 · Work / Finance",
+      "expected_revision": "sha256:9f84b2c1..."
+    },
+    {
+      "kind": "notes.move_note",
+      "note_id": "x-coredata://.../ICNote/p1088",
+      "target_folder": "20 · Engineering",
+      "expected_revision": "sha256:4a71e0d9..."
+    },
+    {
+      "kind": "notes.delete_empty_folder",
+      "folder_path": "Q1 Taxes"
+    }
+  ]
+}`;
+
+const macflyConfigJson = `{
+  "default_profile": "default",
+  "script_timeout_secs": 45,
+  "profiles": {
+    "default": {
+      "allow_accounts": ["iCloud", "Exchange"],
+      "deny_folders": ["Passwords", "Recently Deleted", "Health"],
+      "deny_mailboxes": ["Trash", "Junk", "Banking"],
+      "mail": {
+        "send_enabled": false,
+        "signature": { "source": "apple-mail" }
+      },
+      "shortcuts": {
+        "allow": ["Work Focus On", "Morning Lights"]
+      },
+      "dlp": {
+        "enabled": true,
+        "redact_patterns": ["private_key", "api_key", "iban", "credit_card", "otp_code"]
+      }
+    }
+  }
+}`;
+
+const sampleMarkdownInput = `---
+title: Q4 Architecture Checklist
+folder: 20 · Engineering
+tags: [rust, macos]
+---
+
+# Q4 Architecture Checklist
+
+- Migrate remaining CSV task exports into Apple Reminders
+- Verify SHA-256 plan approval flow on Apple Silicon`;
+
+const sampleCsvInput = `title,due_date,priority,notes
+Send Q4 SLA review to Acme,2026-11-28,high,Attach updated PDF dossier
+Renew Apple Developer certificate,2026-12-05,medium,Check notarization key
+Archive 2025 project notes,2026-12-15,low,Export to Git backup first`;
+
+const reportCommands = `# 1. Direct PDF output (requires 'typst' in PATH — no manual .typ file needed!)
+macfly report person "Acme" --output ./dossier-acme.pdf
+
+# 2. Editable Typst source (for custom styling or casoon/renderreport)
+macfly report person "Acme" --output ./dossier-acme.typ
+typst compile ./dossier-acme.typ ./dossier-acme.pdf
+
+# 3. Pure Markdown (for Git, Obsidian, or Notion)
+macfly report person "Acme" --output ./dossier-acme.md
+
+# Same three output formats work for daily-brief and weekly-review:
+macfly report daily-brief --output ./brief-today.pdf
+macfly report weekly-review --output ./weekly-review.pdf`;
+
+const generatedTypstPreview = `// Auto-generated by: macfly report person "Acme" --output ./dossier-acme.pdf
+#set page(paper: "a4", margin: 22mm)
+#set text(font: "Inter", size: 10pt)
+
+= 360° Dossier: Acme
+#text(fill: luma(100))[Generated locally by MacFly · DLP firewall active]
+
+== Matching Contacts (2)
+- *Alex Rivera* (Acme GmbH) — alex@acme.example · +49 30 5550192
+
+== Apple Notes (5)
+- *[10 · Work]* Acme Architecture & SLA Review (2026-11-18)
+
+== Recent Emails (4)
+- *[Exchange]* Q4 Contract & Billing IBAN [REDACTED:IBAN] (2026-11-20)
+
+== Upcoming Calendar & Open Tasks
+- Kickoff Q4 Review (Tomorrow, 10:00–11:00)
+- [ ] Send Q4 SLA review to Acme (due 2026-11-28)`;
+
+const draftReplyPlanJson = `{
+  "summary": "Create reply draft for Acme invoice inquiry (never auto-sends)",
+  "operations": [
+    {
+      "kind": "mail.create_draft",
+      "account": "Exchange",
+      "to": ["billing@acme.example"],
+      "subject": "Re: Invoice #2026-114 · Wire Transfer Details",
+      "signature": "Corporate Standard",
+      "body": "Hi Alex,\\n\\nthanks for sending invoice #2026-114. Our finance team has received it and scheduled payment for Friday.\\n\\nBest regards,"
+    }
+  ]
+}`;
+
+const mcpClaudeCode = `# One-liner: register MacFly as a local stdio MCP server in Claude Code
+claude mcp add macfly -- macfly mcp --profile default
+
+# Optional: also export the ready-to-use SKILL.md into your workspace
+macfly skill export --output ./.claude/skills/macfly`;
+
+const mcpClaudeDesktop = `// ~/Library/Application Support/Claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "macfly": {
+      "command": "/Users/<you>/.cargo/bin/macfly",
+      "args": ["mcp", "--profile", "default"]
+    }
+  }
+}`;
+
+const mcpCursor = `// .cursor/mcp.json (or ~/.cursor/mcp.json)
+{
+  "mcpServers": {
+    "macfly": {
+      "command": "macfly",
+      "args": ["mcp", "--profile", "default"]
+    }
+  }
+}`;
+
+const mcpLocalLlm = `# Zero-cloud pipeline with Ollama / MLX (no MCP server needed):
+macfly context daily-brief --format agent | ollama run qwen2.5:14b \\
+  "Summarize my top 3 priorities today and list any overdue reminders."`;
+
+const readyPrompts = `# Prompt 1 · Meeting preparation (via MCP)
+"Use MacFly to run context_meeting_prep for my next meeting with Acme.
+Summarize open topics from recent emails and notes, then propose a
+plan_create operation to save a preparation note in '10 · Work'."
+
+# Prompt 2 · Safe inbox triage (via MCP)
+"Search my Exchange inbox with MacFly for unread emails from this week
+about invoices or contracts. Summarize each one and propose draft replies
+via plan_create using my native Apple Mail signature. Do not send anything."
+
+# Prompt 3 · Apple Notes cleanup (via MCP)
+"Run notes_audit with MacFly. Group all single-note folders into my
+00–90 folder structure and propose a single reorganization plan via
+plan_create so I can review and approve it in my terminal."
+
+# Prompt 4 · Weekly review & PDF dossier
+"Run context_weekly_review with MacFly, highlight overdue reminders and
+unanswered threads, and tell me the exact 'macfly report' command to
+compile a PDF summary."`;
+
+const launchdPlistPreview = `<!-- Generated by: macfly schedule add morning-brief --every-minutes 60 -- context daily-brief -->
+<!-- Saved to: ~/Library/LaunchAgents/com.casoon.macfly.morning-brief.plist -->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.casoon.macfly.morning-brief</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/&lt;you&gt;/.cargo/bin/macfly</string>
+      <string>context</string>
+      <string>daily-brief</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+  </dict>
+</plist>`;
 ---
 
 <Base
   title="Use Cases"
-  description="Real-world MacFly workflows rendered with castwright: Apple Notes cleanup, two-way migrations, 360° client dossiers, DLP mail triage, and local launchd routines."
+  description="Hands-on MacFly workflows with real config files, plan JSONs, direct PDF reports, MCP installation snippets, ready-to-use AI prompts, and castwright terminal demos."
 >
   <div class="page">
     <header class="intro">
-      <p class="eyebrow">Real-world workflows · animated with castwright</p>
+      <p class="eyebrow">Hands-on cookbook · configs, prompts &amp; castwright demos</p>
       <h1>Use Cases</h1>
       <p class="lead">
-        Concrete ways teams and solo macOS power users combine MacFly with local LLMs, coding
-        agents, Git knowledge bases, and Typst reports. Every terminal scene below is compiled
-        declaratively with <code>@casoon/castwright</code> to a zero-script animated SVG with an
-        accessible ANSI text fallback.
+        Concrete workflows you can copy and run directly on macOS — including the exact input files,
+        <code>config.json</code> policies, MCP client configs, ready-to-use AI prompts, and
+        animated <code>castwright</code> terminal sessions.
       </p>
       <nav class="jump" aria-label="Use case sections">
         <ul>
-          {
-            useCases.map((uc) => (
-              <li>
-                <a href={`#${uc.id}`}>{uc.eyebrow.split('·')[1]?.trim() ?? uc.title}</a>
-              </li>
-            ))
-          }
+          <li><a href="#notes-cleanup">1. Notes Cleanup &amp; Plans</a></li>
+          <li><a href="#migration">2. Two-Way Migrations</a></li>
+          <li><a href="#dossier">3. 360° Dossier &amp; PDF Reports</a></li>
+          <li><a href="#mail-triage">4. Mail Triage &amp; DLP Firewall</a></li>
+          <li><a href="#mcp-agents">5. MCP Setup, AI Prompts &amp; launchd</a></li>
         </ul>
       </nav>
     </header>
 
     <Callout type="tip">
-      Every scene below respects <code>prefers-reduced-motion</code> automatically and includes a
-      <strong>Stop animation, show as text</strong> toggle for copy-pasting commands or inspecting
-      the full ANSI output.
+      <strong>How every workflow stays safe:</strong> Read commands and context packs never modify
+      your apps. Every write (moving notes, importing files, creating mail drafts) produces a
+      SHA-256 hash-locked plan that you explicitly approve in your own terminal.
     </Callout>
 
-    <div class="cases">
-      {
-        useCases.map((uc) => (
-          <section class="case" id={uc.id} aria-labelledby={`${uc.id}-title`}>
-            <div class="case-head">
-              <p class="case-eyebrow">{uc.eyebrow}</p>
-              <h2 id={`${uc.id}-title`}>{uc.title}</h2>
-              <p class="case-summary">{uc.summary}</p>
-              <div class="case-actions">
-                <Button href={uc.docHref} variant="secondary">
-                  {uc.docLabel}
-                </Button>
-                <Button href={url('showcase/')} variant="quiet">
-                  View in Showcase →
-                </Button>
-              </div>
-            </div>
+    <!-- USE CASE 1 -->
+    <section class="case" id="notes-cleanup" aria-labelledby="notes-cleanup-title">
+      <div class="case-head">
+        <p class="case-eyebrow">Use Case 1 · Hygiene &amp; Reorganization</p>
+        <h2 id="notes-cleanup-title">Clean up a sprawling Apple Notes library safely</h2>
+        <p class="case-summary">
+          Run <code>macfly notes audit</code> to surface empty folders, single-note folders, and
+          duplicate titles. Either write a small JSON plan file yourself — or let an AI agent
+          propose it over MCP — then inspect, approve with the 6-character SHA-256 code, and apply.
+          Notes containing attachments, tables, or checklists are moved losslessly via the built-in
+          Note Fidelity Guard.
+        </p>
+        <dl class="io">
+          <div>
+            <dt>What you provide</dt>
+            <dd>
+              <code>~/.config/macfly/config.json</code> (created once via
+              <code>macfly config init</code>) + a plan JSON file (written manually or generated by
+              an AI agent via MCP <code>plan_create</code>).
+            </dd>
+          </div>
+          <div>
+            <dt>What MacFly produces</dt>
+            <dd>
+              A hash-locked plan in <code>~/.local/share/macfly/plans/</code>, lossless folder moves
+              in Apple Notes after TTY approval, and an audit entry in <code>journal.jsonl</code>.
+            </dd>
+          </div>
+        </dl>
+        <div class="case-actions">
+          <Button href={url('docs/guide/cleaning-up-notes/')} variant="secondary">
+            Notes cleanup guide
+          </Button>
+          <Button href={url('docs/guide/plans-and-workflows/')} variant="quiet">
+            Plan schema &amp; lifecycle →
+          </Button>
+        </div>
+      </div>
 
-            <div class="case-demo">
-              <Fragment set:html={castDemo(uc.demo, `uc-${uc.id}`, uc.caption)} />
-              <details class="cast-source">
-                <summary>
-                  castwright source: <code>assets/casts/{uc.demo}.terminal.yaml</code>
-                </summary>
-                <CodeBlock code={castYaml(uc.demo).trimEnd()} lang="yaml" />
-              </details>
-            </div>
-          </section>
-        ))
-      }
-    </div>
+      <Fragment set:html={castDemo('notes-cleanup', 'uc-notes-cleanup', 'macfly notes audit → plan create → approve → apply')} />
+
+      <Tabs
+        label="Notes cleanup files"
+        tabs={[
+          { id: 'plan', label: 'reorganize-notes.json (Plan input)' },
+          { id: 'config', label: '~/.config/macfly/config.json' },
+        ]}
+      >
+        <div slot="plan">
+          <CodeBlock code={reorganizePlanJson} lang="json" title="reorganize-notes.json" />
+        </div>
+        <div slot="config">
+          <CodeBlock code={macflyConfigJson} lang="json" title="~/.config/macfly/config.json" />
+        </div>
+      </Tabs>
+    </section>
+
+    <!-- USE CASE 2 -->
+    <section class="case" id="migration" aria-labelledby="migration-title">
+      <div class="case-head">
+        <p class="case-eyebrow">Use Case 2 · Two-Way Migrations</p>
+        <h2 id="migration-title">Migrate between Obsidian, Notion, CSV and Apple Notes &amp; Reminders</h2>
+        <p class="case-summary">
+          Point <code>macfly notes import</code> at any folder of <code>.md</code>,
+          <code>.txt</code>, <code>.html</code>, <code>.json</code>, <code>.jsonl</code>, or
+          <code>.csv</code> files (with <code>--recursive</code>) — or feed a Todoist/spreadsheet
+          CSV straight into <code>macfly reminders import</code>. Going the other direction,
+          <code>notes export</code>, <code>mail export</code>, <code>contacts export</code>, and
+          <code>safari export</code> write clean Markdown with YAML frontmatter for Git backups.
+        </p>
+        <dl class="io">
+          <div>
+            <dt>What you provide</dt>
+            <dd>
+              Any existing export folder (Obsidian vault, Notion HTML/Markdown export, Evernote
+              files, or a standard RFC-4180 CSV). No custom MacFly wrapper format required.
+            </dd>
+          </div>
+          <div>
+            <dt>What MacFly produces</dt>
+            <dd>
+              For imports: a reviewable SHA-256 import plan before anything is written. For exports:
+              clean UTF-8 Markdown files with YAML frontmatter (<code>id</code>,
+              <code>folder</code>, <code>revision</code>).
+            </dd>
+          </div>
+        </dl>
+        <div class="case-actions">
+          <Button href={url('docs/guide/migrations/')} variant="secondary">
+            Full migrations guide
+          </Button>
+        </div>
+      </div>
+
+      <Fragment set:html={castDemo('migration-import', 'uc-migration', 'macfly notes import · reminders import · notes export')} />
+
+      <Tabs
+        label="Migration sample inputs"
+        tabs={[
+          { id: 'md', label: 'Sample .md input (Obsidian/Git)' },
+          { id: 'csv', label: 'Sample .csv input (Reminders)' },
+        ]}
+      >
+        <div slot="md">
+          <CodeBlock code={sampleMarkdownInput} lang="markdown" title="obsidian-vault/q4-checklist.md" />
+        </div>
+        <div slot="csv">
+          <CodeBlock code={sampleCsvInput} lang="csv" title="todoist-tasks.csv" />
+        </div>
+      </Tabs>
+    </section>
+
+    <!-- USE CASE 3 -->
+    <section class="case" id="dossier" aria-labelledby="dossier-title">
+      <div class="case-head">
+        <p class="case-eyebrow">Use Case 3 · 360° Cross-App Context &amp; PDF Reports</p>
+        <h2 id="dossier-title">Generate a 360° client dossier and compile a PDF directly</h2>
+        <p class="case-summary">
+          You do <strong>not</strong> need to supply any <code>.typ</code> or JSON input file.
+          <code>macfly context person "Acme"</code> reads Contacts, Apple Notes, Apple Mail (all
+          accounts), Calendar, and Reminders live on your Mac and correlates everything in one
+          DLP-filtered dossier. Pass <code>--output ./dossier-acme.pdf</code> to
+          <code>macfly report</code> and MacFly generates the Typst source automatically and
+          compiles the final <strong>PDF</strong> for you (requires <code>typst</code> in
+          <code>PATH</code>, e.g. <code>brew install typst</code>).
+        </p>
+        <dl class="io">
+          <div>
+            <dt>What you provide</dt>
+            <dd>
+              Only a search term (person name, company, or email) — <strong>no input file</strong>
+              required.
+            </dd>
+          </div>
+          <div>
+            <dt>Why .pdf, .typ, and .md are all supported</dt>
+            <dd>
+              Use <code>--output dossier.pdf</code> for a ready-to-share PDF in one step,
+              <code>--output dossier.typ</code> if you want to tweak the Typst layout or pass it to
+              <code>renderreport</code>, or <code>--output dossier.md</code> for plain Markdown.
+            </dd>
+          </div>
+        </dl>
+        <div class="case-actions">
+          <Button href={url('docs/guide/getting-started/')} variant="secondary">
+            Getting started
+          </Button>
+        </div>
+      </div>
+
+      <Fragment set:html={castDemo('context-dossier', 'uc-dossier', 'macfly context person "Acme" → macfly report person --output .pdf')} />
+
+      <Tabs
+        label="Report output formats"
+        tabs={[
+          { id: 'cli', label: 'CLI commands (.pdf / .typ / .md)' },
+          { id: 'typ', label: 'Auto-generated dossier-acme.typ' },
+        ]}
+      >
+        <div slot="cli">
+          <CodeBlock code={reportCommands} lang="sh" title="Direct PDF, Typst, or Markdown output" />
+        </div>
+        <div slot="typ">
+          <CodeBlock code={generatedTypstPreview} lang="typst" title="dossier-acme.typ (auto-generated)" />
+        </div>
+      </Tabs>
+    </section>
+
+    <!-- USE CASE 4 -->
+    <section class="case" id="mail-triage" aria-labelledby="mail-triage-title">
+      <div class="case-head">
+        <p class="case-eyebrow">Use Case 4 · Privacy-First Mail Triage &amp; DLP Firewall</p>
+        <h2 id="mail-triage-title">Triage Apple Mail with automatic secret redaction and safe drafts</h2>
+        <p class="case-summary">
+          MacFly reads across every account already signed into Apple Mail (Exchange, iCloud, Gmail,
+          custom IMAP) without cloud OAuth tokens. Before any text reaches a model, the Rust DLP
+          engine redacts IBANs, API keys, private keys, credit cards, and OTP codes and tags
+          incoming mail as <code>untrusted_external</code>. Signatures are fetched straight from
+          Apple Mail (Single Point of Truth), and replies are created as drafts only.
+        </p>
+        <dl class="io">
+          <div>
+            <dt>What you provide</dt>
+            <dd>
+              Your DLP &amp; denylist rules in <code>~/.config/macfly/config.json</code> (active by
+              default after <code>macfly config init</code>) and a <code>mail.create_draft</code>
+              plan (created manually or by your AI agent).
+            </dd>
+          </div>
+          <div>
+            <dt>What MacFly produces</dt>
+            <dd>
+              Redacted search/read results and — only after your TTY approval — a ready-to-review
+              draft in Apple Mail with your native signature attached.
+            </dd>
+          </div>
+        </dl>
+        <div class="case-actions">
+          <Button href={url('docs/architecture/security-model/')} variant="secondary">
+            Security model &amp; DLP
+          </Button>
+        </div>
+      </div>
+
+      <Fragment set:html={castDemo('dlp-mail-triage', 'uc-mail-triage', 'macfly mail search (DLP) → signatures → safe draft plan')} />
+
+      <CodeBlock code={draftReplyPlanJson} lang="json" title="draft-reply.json (mail.create_draft plan)" />
+    </section>
+
+    <!-- USE CASE 5 -->
+    <section class="case" id="mcp-agents" aria-labelledby="mcp-agents-title">
+      <div class="case-head">
+        <p class="case-eyebrow">Use Case 5 · MCP Setup, Ready-to-Use AI Prompts &amp; launchd</p>
+        <h2 id="mcp-agents-title">Connect Claude, Cursor, Codex, or Ollama — plus local schedules</h2>
+        <p class="case-summary">
+          MacFly ships a built-in <code>stdio</code> MCP server (<code>macfly mcp</code>) exposing
+          19 read, context-pack, and <code>plan_create</code> tools — while intentionally omitting
+          <code>plan_approve</code> and <code>plan_apply</code> so no agent can self-approve writes.
+          Export a ready-to-use <code>SKILL.md</code> with <code>macfly skill export</code>, or
+          schedule recurring local briefings with native macOS <code>launchd</code> agents.
+        </p>
+        <dl class="io">
+          <div>
+            <dt>How MCP is installed</dt>
+            <dd>
+              Install the binary once via <code>cargo install macfly</code>, then add the 4-line
+              <code>mcpServers</code> block below to Claude Code, Claude Desktop, or Cursor.
+            </dd>
+          </div>
+          <div>
+            <dt>How AI workflows run in practice</dt>
+            <dd>
+              Ask your agent using one of the prompts below → the agent reads via MCP (DLP-filtered)
+              and proposes a <code>plan_id</code> → you run <code>macfly plan inspect</code>,
+              <code>approve</code>, and <code>apply</code> in your terminal.
+            </dd>
+          </div>
+        </dl>
+        <div class="case-actions">
+          <Button href={url('docs/guide/mcp-and-agents/')} variant="secondary">
+            MCP &amp; AI agents reference
+          </Button>
+        </div>
+      </div>
+
+      <Fragment set:html={castDemo('daily-automation', 'uc-automation', 'macfly context daily-brief · schedule add · skill export')} />
+
+      <Tabs
+        label="MCP client setup"
+        tabs={[
+          { id: 'claude-code', label: 'Claude Code' },
+          { id: 'claude-desktop', label: 'Claude Desktop' },
+          { id: 'cursor', label: 'Cursor' },
+          { id: 'ollama', label: 'Local Ollama (Zero Cloud)' },
+        ]}
+      >
+        <div slot="claude-code">
+          <CodeBlock code={mcpClaudeCode} lang="sh" title="Register MCP + export SKILL.md" />
+        </div>
+        <div slot="claude-desktop">
+          <CodeBlock code={mcpClaudeDesktop} lang="json" title="claude_desktop_config.json" />
+        </div>
+        <div slot="cursor">
+          <CodeBlock code={mcpCursor} lang="json" title=".cursor/mcp.json" />
+        </div>
+        <div slot="ollama">
+          <CodeBlock code={mcpLocalLlm} lang="sh" title="Local Apple Silicon LLM pipe" />
+        </div>
+      </Tabs>
+
+      <Tabs
+        label="Prompts and launchd schedule"
+        tabs={[
+          { id: 'prompts', label: 'Ready-to-use AI prompts' },
+          { id: 'plist', label: 'Generated launchd .plist' },
+        ]}
+      >
+        <div slot="prompts">
+          <CodeBlock code={readyPrompts} lang="sh" title="Copy-paste prompts for MCP & local agents" />
+        </div>
+        <div slot="plist">
+          <CodeBlock code={launchdPlistPreview} lang="xml" title="~/Library/LaunchAgents/com.casoon.macfly.morning-brief.plist" />
+        </div>
+      </Tabs>
+    </section>
   </div>
 </Base>
 
 <style>
   .page {
     display: grid;
-    gap: 36px;
+    gap: 40px;
     max-width: var(--max);
     margin: 0 auto;
     padding: 56px 24px 96px;
@@ -156,12 +525,14 @@ const useCases = [
     letter-spacing: -0.025em;
   }
   .lead {
-    max-width: 66ch;
+    max-width: 68ch;
     margin: 0 0 24px;
     font-size: 17px;
     line-height: 1.65;
   }
-  .lead code {
+  .lead code,
+  .case-summary code,
+  .io code {
     padding: 1px 5px;
     border-radius: 5px;
     background: var(--code-bg);
@@ -190,52 +561,58 @@ const useCases = [
     border-color: var(--accent);
     color: var(--heading);
   }
-  .cases {
-    display: grid;
-    gap: 56px;
-  }
   .case {
     display: grid;
-    gap: 20px;
-    padding-top: 24px;
+    gap: 22px;
+    padding-top: 32px;
     border-top: 1px solid var(--border);
     scroll-margin-top: 96px;
   }
-  .case:first-child {
+  .case:first-of-type {
     padding-top: 0;
     border-top: 0;
   }
   .case h2 {
     margin: 0 0 12px;
     color: var(--heading);
-    font-size: 25px;
+    font-size: 26px;
     font-weight: 600;
     letter-spacing: -0.018em;
     line-height: 1.25;
   }
   .case-summary {
-    max-width: 72ch;
+    max-width: 74ch;
     margin: 0 0 18px;
     font-size: 15.5px;
     line-height: 1.65;
+  }
+  .io {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 16px;
+    margin: 0 0 20px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+  }
+  .io dt {
+    margin: 0 0 6px;
+    color: var(--heading);
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .io dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.55;
   }
   .case-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-  }
-  .case-demo {
-    display: grid;
-    gap: 12px;
-    min-width: 0;
-  }
-  .cast-source summary {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 13.5px;
-  }
-  .cast-source[open] summary {
-    margin-bottom: 10px;
   }
 </style>

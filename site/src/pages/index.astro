@@ -18,7 +18,7 @@ import Base from '@casoon/pages-theme/layouts/Base.astro';
 import { parseChangelog } from '@casoon/pages-theme/lib/changelog';
 import { url } from '@casoon/pages-theme/url';
 import config from 'virtual:casoon-pages/config';
-import { castDemo } from '../showcase';
+import { castDemo } from '../casts';
 
 const latestRelease = config.changelog
   ? parseChangelog(await readFile(config.changelog, 'utf8')).find(
@@ -46,7 +46,7 @@ macfly mail export --output ./mail-archive --query "Invoice"
 # 4. Cross-app 360° dossiers, Typst reports, SKILL.md & launchd schedules
 macfly context person "Acme"
 macfly context meeting-prep --query "Kickoff" --create-note
-macfly report person "Acme" --output ./dossier-acme.typ
+macfly report person "Acme" --output ./dossier-acme.pdf
 macfly skill export --output ./.claude/skills/macfly`;
 ---
 

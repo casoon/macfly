@@ -2,7 +2,7 @@
 
 Local, deterministic macOS automation CLI, migration toolkit, and `stdio` MCP server in pure Rust — with a read-side data firewall and cryptographic plan approval between AI agents and your personal apps.
 
-**Documentation:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases](https://casoon.github.io/macfly/demo/) · [Showcase](https://casoon.github.io/macfly/showcase/) · [Changelog](https://casoon.github.io/macfly/changelog/)
+**Documentation:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases](https://casoon.github.io/macfly/demo/) · [Changelog](https://casoon.github.io/macfly/changelog/)
 
 ![MacFly terminal demo: macfly doctor, notes audit, and 360° person dossier](./assets/casts/hero.svg)
 

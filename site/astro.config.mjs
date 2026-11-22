@@ -19,9 +19,7 @@ export default defineConfig({
         { label: 'GitHub Releases', href: 'https://github.com/casoon/macfly/releases' },
       ],
       demo: 'Use Cases',
-      showcase: './src/showcase.ts',
-      showcaseLead:
-        'Command-to-output examples of MacFly in action — rendered declaratively with castwright and styled by runemark.',
+      showcase: false,
       changelog: '../CHANGELOG.md',
       docsGroups: {
         guide: 'Guide',
