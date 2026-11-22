@@ -1,6 +1,6 @@
 ---
-title: Cleaning Up Apple Notes
-description: Structure-agnostic field guide for reorganizing large Apple Notes libraries safely with MacFly — based on real-world lessons and Apple Notes edge cases.
+title: Cleaning Up & Migrating Notes
+description: Structure-agnostic field guide for reorganizing Apple Notes libraries and migrating between Apple Notes, Apple Mail, and Markdown knowledge bases.
 order: 4
 ---
 
@@ -118,3 +118,47 @@ macfly notes audit
 Catching new single-note folders, empty folders, and duplicate titles early
 takes two minutes — and keeps your Notes library fast, searchable, and easy for
 both humans and AI agents to navigate.
+
+---
+
+## Cross-System Migrations (Apple Notes & Mail ⇄ Markdown / Git)
+
+Beyond reorganizing folders inside Apple Notes, MacFly supports deterministic
+migrations between Apple's native apps and local Markdown repositories (such as
+Git-backed knowledge bases, Obsidian, or static documentation):
+
+### 1. Exporting Apple Notes to Markdown + YAML frontmatter
+
+```bash
+# Export an entire folder tree (mirrors subfolder structure 1:1)
+macfly notes export --output ./kb-export --folder "10 · Work" --limit 500
+```
+
+Each note is written as `<title>.md` with structured YAML frontmatter (`title`,
+`id`, `account`, `folder`, `modified_at`, `revision`). By default, DLP
+redaction remains active; pass `--no-redact` when creating a private local
+backup.
+
+### 2. Archiving project emails to Markdown
+
+```bash
+# Export project or invoice emails as cleaned Markdown files
+macfly mail export --output ./project-mails --query "Project Alpha" --limit 50
+```
+
+Each email becomes `<date>-<local_id>-<subject>.md` with frontmatter (`subject`,
+`from`, `to`, `cc`, `date_received`, `account`, `mailbox`, `trust_level`) and
+quote-trimmed body text.
+
+### 3. Importing Markdown files into Apple Notes via Plan
+
+When migrating notes *into* Apple Notes (for example from a Markdown folder or
+another note tool's export) so they sync across Mac, iPhone, and iPad:
+
+```bash
+macfly notes import --input ./markdown-notes --folder "00 · Inbox"
+```
+
+Instead of writing blindly, `notes import` parses frontmatter titles (or top
+`# Heading` lines) and creates a **tamper-evident `macfly plan`** that you
+inspect, approve, and apply like any other change.
