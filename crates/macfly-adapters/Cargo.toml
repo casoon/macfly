@@ -1,0 +1,11 @@
+[package]
+name = "macfly-adapters"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Safe JXA/AppleScript adapters for macOS apps (Apple Notes, Apple Mail) in pure Rust"
+
+[dependencies]
+macfly-core = { path = "../macfly-core" }
+serde.workspace = true
+serde_json.workspace = true

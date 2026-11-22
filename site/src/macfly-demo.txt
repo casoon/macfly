@@ -1,0 +1,22 @@
+$ macfly doctor
+MacFly Doctor
+  OS:             macos
+  osascript:      OK
+  Config:         ~/.config/macfly/config.json (loaded)
+  Profile:        default
+  Apple Notes:    ok (1 account, 240 notes)
+  Apple Mail:     ok (2 accounts, 14 unread, 2 signatures)
+
+$ macfly plan create --input cleanup.json
+Plan created:     plan-1763812400-8f4a21c0
+  Risk:           Medium (Reversible)
+  Hash:           sha256:8f4a21c09e...
+  Approval code:  8F4A21
+
+Operations:
+  • [notes.move] Note 'Q4 Roadmap' → folder '10 · Work/Projects'
+  • [notes.delete_empty_folder] Remove empty folder 'Old Scratchpad'
+  • [mail.create_draft] Draft to team@example.org (signature: Apple Mail)
+
+Next step (interactive TTY required):
+  macfly plan approve plan-1763812400-8f4a21c0

@@ -1,0 +1,75 @@
+---
+import { Badge, Badges, Facts, Features, Hero, Quickstart, Terminal } from '@casoon/pages-theme/components';
+import Base from '@casoon/pages-theme/layouts/Base.astro';
+import demo from '../macfly-demo.txt?raw';
+---
+
+<Base>
+  <Hero
+    eyebrow="CASOON open source · Rust + AppleScript/JXA"
+    title="Deterministic macOS automation — with a security firewall between AI agents and your personal data."
+    lead="MacFly pairs a deterministic Rust core with a minimal, stdin-only AppleScript/JXA boundary for Apple Notes, Mail, Calendar, and Reminders. No Xcode project, no private database hacks, no blind writes — just auditable plans, read-side DLP redaction, and a clean upgrade path across macOS releases."
+  >
+    <Badges>
+      <Badge>Pure Rust Core</Badge>
+      <Badge>stdin-only JXA</Badge>
+      <Badge>Zero Xcode / SDK Drift</Badge>
+      <Badge>DLP Firewall</Badge>
+      <Badge>SHA-256 Plan Approval</Badge>
+      <Badge>MCP stdio</Badge>
+      <Badge>MIT / Apache-2.0</Badge>
+    </Badges>
+    <Terminal slot="output" title="macfly doctor & plan create" dots ansi={demo} />
+  </Hero>
+
+  <Facts
+    items={[
+      { value: '100% Rust', label: 'deterministic core — policy, DLP, HTML parsing and hashing run offline in cargo test' },
+      { value: '0 SDK drift', label: 'no Swift toolchain, no Xcode project, no brittle private framework bindings' },
+      { value: 'SHA-256', label: 'canonical plan hash binding with interactive TTY approval and audit journal' },
+      { value: 'Read + Plan', label: 'strict MCP boundary — agents may inspect and propose, never approve or apply' },
+    ]}
+  />
+
+  <Features
+    heading="Why Rust + AppleScript/JXA — and why security comes first"
+    items={[
+      {
+        title: 'Deterministic core, thin macOS edge',
+        body: 'Policy evaluation, DLP redaction, HTML-to-text normalization, note fidelity checks, canonical SHA-256 plan hashing, and the audit journal all live in pure, memory-safe Rust. The macOS boundary is reduced to small, static JXA scripts fed exclusively via JSON over stdin — easy to maintain across yearly macOS updates and swap out per app.',
+      },
+      {
+        title: 'Built for long-term evolution without SDK lock-in',
+        body: 'Because MacFly does not depend on Xcode projects, Node.js runtimes, or undocumented private SQLite formats in its default path, it compiles in seconds with Cargo and keeps working when macOS internals shift. Every adapter is isolated behind a typed contract.',
+      },
+      {
+        title: 'Read-side Data Firewall (DLP) & prompt-injection defense',
+        body: 'Before any note or email reaches an LLM, MacFly enforces profile allowlists and denylists, redacts IBANs, credit cards, API keys, private keys, and 6-digit OTP codes, and wraps external emails as untrusted_external data with explicit anti-injection framing.',
+      },
+      {
+        title: 'Tamper-evident plans: Plan → Inspect → Approve → Apply',
+        body: 'Agents never mutate your apps directly. Every write is validated against profile scopes and note revisions, hashed with SHA-256, stored at 0600, and requires an interactive terminal confirmation code before execution. Every run is logged to a local JSONL audit journal.',
+      },
+      {
+        title: 'Fidelity guard for Apple Notes',
+        body: 'Naive script writes silently wipe attachments, tables, checklists, and internal applenotes:// links. MacFly inspects note fidelity before any edit, blocks destructive body replacement on rich notes, and moves notes and whole folder trees losslessly.',
+      },
+      {
+        title: 'Single Point of Truth for Mail, Notes, Calendar & Reminders',
+        body: 'No duplicate IMAP credentials and no second copy of your email footer. MacFly uses your existing Apple Mail accounts, pulls signatures straight from Apple Mail, creates drafts for human review, and combines Mail, Notes, Calendar, and Reminders into one daily-brief context pack.',
+      },
+    ]}
+  />
+
+  <Quickstart
+    title="Get started in two minutes"
+    lead="One Rust binary, one central config file, zero external runtimes."
+    steps={[
+      'Build: cargo build --release',
+      'Check macOS access: macfly doctor',
+      'Create single-point-of-truth config: macfly config init (~/.config/macfly/config.json)',
+      'Inspect & audit: macfly notes overview · macfly notes audit · macfly mail overview · macfly context daily-brief',
+      'Connect any MCP client: point stdio to `macfly mcp --profile default` (read + plan-create only)',
+    ]}
+  />
+</Base>
