@@ -2,6 +2,7 @@
 import {
   Badge,
   Badges,
+  CodeBlock,
   Compare,
   Facts,
   Features,
@@ -13,6 +14,23 @@ import {
 } from '@casoon/pages-theme/components';
 import Base from '@casoon/pages-theme/layouts/Base.astro';
 import demo from '../macfly-demo.txt?raw';
+
+const quickstartCode = `# 1. Install from crates.io & verify macOS access
+cargo install macfly
+macfly doctor
+
+# 2. Initialize ~/.config/macfly/config.json
+macfly config init
+
+# 3. Inspect Notes, Mail, Calendar, Reminders & Shortcuts
+macfly notes overview
+macfly notes audit
+macfly mail overview
+macfly shortcuts list
+macfly context daily-brief
+
+# 4. Or connect as a read + plan-only stdio MCP server
+# { "mcpServers": { "macfly": { "command": "macfly", "args": ["mcp"] } } }`;
 ---
 
 <Base>
@@ -153,11 +171,13 @@ import demo from '../macfly-demo.txt?raw';
     title="Get started in two minutes"
     lead="Install from crates.io, verify macOS permissions, and inspect your Notes, Mail, Calendar, Reminders, and Shortcuts."
     steps={[
-      'Install: cargo install macfly',
-      'Check macOS access: macfly doctor',
-      'Create central config: macfly config init (~/.config/macfly/config.json)',
-      'Audit & inspect: macfly notes audit · macfly mail overview · macfly shortcuts list · macfly context daily-brief',
-      'Connect an MCP client: point stdio to `macfly mcp --profile default`',
+      'Install the binary: <code>cargo install macfly</code>',
+      'Check macOS access: <code>macfly doctor</code>',
+      'Create central config: <code>macfly config init</code>',
+      'Audit &amp; inspect: <code>macfly notes audit</code> · <code>macfly mail overview</code> · <code>macfly context daily-brief</code>',
+      'Connect an MCP client: point stdio to <code>macfly mcp --profile default</code>',
     ]}
-  />
+  >
+    <CodeBlock title="Terminal & MCP setup" lang="bash" code={quickstartCode} />
+  </Quickstart>
 </Base>
