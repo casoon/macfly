@@ -20,6 +20,17 @@ exfiltration when reading. MacFly addresses both systematically.
 | **T6** | Silent data loss on rich notes | Setting HTML body overwrites attachments, tables, checklists, or `applenotes://` links | `analyze_note_fidelity` inspects every note and blocks `replace_body` when rich content is present; moves operate on native note objects losslessly. |
 | **T7** | Unchecked irreversible actions | Sending an email or deleting a non-empty folder cannot be undone | Mail mutations create **drafts** for review (no blind send); `notes_delete_empty_folder` re-verifies zero notes and zero active subfolders live before deleting. |
 
+## Privacy by Deployment: Local AI vs. Cloud Models
+
+Because MacFly speaks plain JSON over CLI and `stdio` MCP without tying you to
+a specific provider, the strongest defense against cloud data leakage is
+architectural: **pair MacFly with a local model (Ollama, LM Studio, MLX,
+`llama.cpp`) for private notes, mail triage, and local workflows.** Nothing
+leaves your Mac.
+
+When cloud models are used, MacFly's read-side Data Firewall (DLP) and strict
+profile scopes reduce exposure to only what you explicitly allow.
+
 ## Read-Side Data Firewall (DLP)
 
 Every `notes read` and `mail read` passes through the deterministic Rust DLP

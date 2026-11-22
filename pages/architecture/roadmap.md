@@ -23,12 +23,19 @@ order: 3
 
 ## Next Milestones
 
+- **Generic Apple Shortcuts adapter (`macfly shortcuts`):** Allowlist-gated
+  bridge to macOS `shortcuts run` — enabling Focus modes, HomeKit scenes, and
+  modern App Intents without fragile UI scripting
 - **Privilege Separation (`macfly-broker`):** Separate signed local macOS
   helper holding the TCC permissions over a restricted Unix socket, so AI
   agents can run with zero macOS Automation rights
 - **Out-of-Band Touch ID approval (`LAContext`):** Native macOS approval sheet
   bound to the canonical SHA-256 plan hash for high-risk plans
+- **Focused Workspace Hygiene:** Deliberate, non-bloated audit & plan workflows
+  for Downloads, Desktop, browser tabs, and stale build artifacts (always via
+  macOS Trash, never blind `rm -rf`)
+- **Targeted App Adapters (only where stable `sdef` dictionaries exist):**
+  Apple Photos (albums & targeted exports), Safari tabs (research capture into
+  Notes), and Apple Contacts
 - **Local SQLite FTS5 cache:** Incremental indexing for instant full-text search
   across 10,000+ email archives without touching private Apple databases by default
-- **Batch JXA plan execution:** Run multi-operation plans inside a single
-  script invocation for even faster large-scale reorganizations

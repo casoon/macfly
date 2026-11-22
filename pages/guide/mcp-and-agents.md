@@ -6,11 +6,24 @@ order: 3
 
 MacFly gives you two clean integration paths from the **exact same binary**:
 
-1. **CLI-first (`--format agent`):** Ideal for terminal agents (Codex, Claude
-   Code, Gemini CLI) and shell scripts — zero daemon overhead, works directly
-   with pipes and files.
+1. **CLI-first (`--format agent`):** Ideal for terminal agents, local LLM
+   pipelines, and shell scripts — zero daemon overhead, works directly with
+   pipes and files.
 2. **Built-in `stdio` MCP server (`macfly mcp`):** Ideal for desktop clients
-   like Claude Desktop, Cursor, or Antigravity.
+   like Claude Desktop, Cursor, Antigravity, or local MCP-capable runners.
+
+## First-class use case: Local AI (Zero Cloud Transfer)
+
+MacFly is **completely model-independent** — it does not bundle or require any
+cloud API key. That makes it a natural fit for **local LLMs running on Apple
+Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
+
+- Your emails, personal notes, calendar events, and reminders **never leave your
+  Mac** — no accidental data transfer to ChatGPT, Claude, or other cloud
+  providers.
+- Even when you *do* choose a cloud model for specific tasks, MacFly's
+  read-side DLP firewall and `deny_folders` / `deny_mailboxes` policies act as
+  an explicit safety net before any text leaves your machine.
 
 ## MCP client configuration
 
