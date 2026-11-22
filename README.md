@@ -49,12 +49,15 @@ macfly notes audit
 macfly notes list --limit 20
 macfly notes search "Roadmap"
 macfly notes read "<note-id>"
+macfly notes export --output ./notes-backup --folder "10 · Work"
+macfly notes import --input ./drafts --folder "00 · Inbox"
 
 # Apple Mail
 macfly mail overview
 macfly mail signatures
 macfly mail list --unread --limit 15
 macfly mail read "<local-id>"
+macfly mail export --output ./mail-archive --query "Invoice" --limit 20
 
 # Apple Calendar & Reminders
 macfly calendar events --days 7

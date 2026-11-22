@@ -16,7 +16,7 @@ use macfly_core::config::Config;
 use macfly_core::error::MacflyError;
 use macfly_core::journal::AuditJournal;
 use macfly_core::model::DailyBrief;
-use macfly_core::plan::{PlanProposal, PlanStore, now_unix};
+use macfly_core::plan::{PlanOperation, PlanProposal, PlanStore, now_unix};
 use runemark::ColorMode;
 use serde::Serialize;
 
@@ -174,6 +174,28 @@ enum NotesAction {
         #[arg(long)]
         no_redact: bool,
     },
+    /// Exportiert Notizen als Markdown-Dateien (inkl. YAML-Frontmatter) in ein Verzeichnis
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        folder: Option<String>,
+        #[arg(long)]
+        account: Option<String>,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        #[arg(long)]
+        no_redact: bool,
+    },
+    /// Importiert eine Markdown-/Text-Datei (oder ein Verzeichnis) als geprüften Änderungsplan nach Apple Notes
+    Import {
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        folder: String,
+        #[arg(long)]
+        account: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -210,6 +232,23 @@ enum MailAction {
         account: Option<String>,
         #[arg(long)]
         mailbox: Option<String>,
+        #[arg(long)]
+        no_redact: bool,
+    },
+    /// Exportiert E-Mails als Markdown-Dateien (inkl. YAML-Frontmatter) in ein Verzeichnis
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        account: Option<String>,
+        #[arg(long, default_value = "INBOX")]
+        mailbox: String,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        unread: bool,
+        #[arg(long, default_value_t = 25)]
+        limit: usize,
         #[arg(long)]
         no_redact: bool,
     },
@@ -557,6 +596,114 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
             }
             Ok(())
         }
+        NotesAction::Export {
+            output,
+            folder,
+            account,
+            limit,
+            no_redact,
+        } => {
+            let list = adapter.list(
+                profile_name,
+                profile,
+                &ListNotesQuery {
+                    account: account.clone(),
+                    folder: folder.clone(),
+                    query: None,
+                    limit: *limit,
+                },
+            )?;
+            fs::create_dir_all(output)?;
+            let mut exported_files = Vec::new();
+            for summary in &list.notes {
+                let detail = adapter.read(profile_name, profile, &summary.id, false, *no_redact)?;
+                let rel_folder = if detail.folder_path.is_empty() {
+                    sanitize_filename(&detail.folder)
+                } else {
+                    detail
+                        .folder_path
+                        .split('/')
+                        .map(sanitize_filename)
+                        .collect::<Vec<_>>()
+                        .join("/")
+                };
+                let target_dir = output.join(&rel_folder);
+                fs::create_dir_all(&target_dir)?;
+                let fname = format!("{}.md", sanitize_filename(&detail.title));
+                let file_path = target_dir.join(fname);
+                let md = format!(
+                    "---\ntitle: {:?}\nid: {:?}\naccount: {:?}\nfolder: {:?}\nmodified_at: {:?}\nrevision: {:?}\n---\n\n{}\n",
+                    detail.title,
+                    detail.id,
+                    detail.account,
+                    detail.folder_path,
+                    detail.modified_at.clone().unwrap_or_default(),
+                    detail.revision,
+                    detail.body_text
+                );
+                fs::write(&file_path, md)?;
+                exported_files.push(file_path.display().to_string());
+            }
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!(
+                        "{} Notiz(en) als Markdown exportiert nach: {}",
+                        exported_files.len(),
+                        output.display()
+                    );
+                }
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output_dir": output.display().to_string(),
+                        "exported_count": exported_files.len(),
+                        "files": exported_files,
+                    }),
+                )?,
+            }
+            Ok(())
+        }
+        NotesAction::Import {
+            input,
+            folder,
+            account,
+        } => {
+            let files = collect_import_files(input)?;
+            if files.is_empty() {
+                return Err(MacflyError::PlanError(format!(
+                    "Keine .md oder .txt Dateien gefunden unter {}",
+                    input.display()
+                )));
+            }
+            let mut operations = Vec::new();
+            for path in &files {
+                let raw = fs::read_to_string(path)?;
+                let (title, body) = parse_markdown_note(path, &raw);
+                operations.push(PlanOperation::NotesCreate {
+                    account: account.clone(),
+                    folder: folder.clone(),
+                    title,
+                    body,
+                });
+            }
+            let store = PlanStore::default_store();
+            let proposal = PlanProposal {
+                schema_version: "1.0".to_string(),
+                summary: Some(format!(
+                    "Notes-Import: {} Datei(en) nach '{}'",
+                    operations.len(),
+                    folder
+                )),
+                operations,
+            };
+            let plan = store.create(profile_name, profile, proposal, 900)?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
+                _ => emit_json(cli.format, &plan)?,
+            }
+            Ok(())
+        }
     }
 }
 
@@ -659,6 +806,85 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
                     println!("{}", msg.body_text);
                 }
                 _ => emit_json(cli.format, &msg)?,
+            }
+            Ok(())
+        }
+        MailAction::Export {
+            output,
+            account,
+            mailbox,
+            query,
+            unread,
+            limit,
+            no_redact,
+        } => {
+            let list = adapter.list(
+                profile_name,
+                profile,
+                &ListMailQuery {
+                    account: account.clone(),
+                    mailbox: Some(mailbox.clone()),
+                    unread_only: *unread,
+                    query: query.clone(),
+                    limit: *limit,
+                    scan_limit: 250,
+                },
+            )?;
+            fs::create_dir_all(output)?;
+            let mut exported_files = Vec::new();
+            for summary in &list.messages {
+                let detail = adapter.read(
+                    profile_name,
+                    profile,
+                    &summary.local_id,
+                    Some(&summary.account),
+                    Some(&summary.mailbox),
+                    *no_redact,
+                )?;
+                let date_prefix = detail
+                    .date_received
+                    .as_deref()
+                    .and_then(|s| s.get(..10))
+                    .unwrap_or("undated");
+                let fname = format!(
+                    "{}-{}-{}.md",
+                    date_prefix,
+                    detail.local_id,
+                    sanitize_filename(&detail.subject)
+                );
+                let file_path = output.join(fname);
+                let md = format!(
+                    "---\nsubject: {:?}\nfrom: {:?}\nto: {:?}\ncc: {:?}\ndate_received: {:?}\naccount: {:?}\nmailbox: {:?}\nlocal_id: {:?}\ntrust_level: \"untrusted_external\"\n---\n\n{}\n",
+                    detail.subject,
+                    detail.sender,
+                    detail.to,
+                    detail.cc,
+                    detail.date_received.clone().unwrap_or_default(),
+                    detail.account,
+                    detail.mailbox,
+                    detail.local_id,
+                    detail.body_text
+                );
+                fs::write(&file_path, md)?;
+                exported_files.push(file_path.display().to_string());
+            }
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!(
+                        "{} E-Mail(s) als Markdown exportiert nach: {}",
+                        exported_files.len(),
+                        output.display()
+                    );
+                }
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output_dir": output.display().to_string(),
+                        "exported_count": exported_files.len(),
+                        "files": exported_files,
+                    }),
+                )?,
             }
             Ok(())
         }
@@ -1032,4 +1258,88 @@ fn print_mail_list(
         _ => emit_json(format, res)?,
     }
     Ok(())
+}
+
+fn sanitize_filename(input: &str) -> String {
+    let cleaned: String = input
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\n' | '\r' => '-',
+            _ => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "untitled".to_string()
+    } else {
+        trimmed.chars().take(80).collect()
+    }
+}
+
+fn collect_import_files(input: &PathBuf) -> Result<Vec<PathBuf>, MacflyError> {
+    if input.is_file() {
+        return Ok(vec![input.clone()]);
+    }
+    if !input.is_dir() {
+        return Err(MacflyError::NotFound(format!(
+            "Import-Pfad existiert nicht: {}",
+            input.display()
+        )));
+    }
+    let mut out = Vec::new();
+    for entry in fs::read_dir(input)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file()
+            && let Some(ext) = path.extension().and_then(|e| e.to_str())
+            && (ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("txt"))
+        {
+            out.push(path);
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+fn parse_markdown_note(path: &std::path::Path, raw: &str) -> (String, String) {
+    let fallback_title = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Imported Note")
+        .to_string();
+
+    let mut body = raw.trim().to_string();
+    let mut fm_title: Option<String> = None;
+
+    if let Some(rest) = body.strip_prefix("---\n")
+        && let Some(end_idx) = rest.find("\n---\n")
+    {
+        let fm = &rest[..end_idx];
+        for line in fm.lines() {
+            if let Some(val) = line.strip_prefix("title:") {
+                let t = val.trim().trim_matches('"').trim_matches('\'');
+                if !t.is_empty() {
+                    fm_title = Some(t.to_string());
+                }
+            }
+        }
+        body = rest[end_idx + 5..].trim().to_string();
+    }
+
+    if let Some(t) = fm_title {
+        return (t, body);
+    }
+
+    let mut lines = body.lines();
+    if let Some(first) = lines.next()
+        && let Some(heading) = first.strip_prefix("# ")
+    {
+        let title = heading.trim().to_string();
+        let remaining: String = lines.collect::<Vec<_>>().join("\n").trim().to_string();
+        if !title.is_empty() {
+            return (title, remaining);
+        }
+    }
+
+    (fallback_title, body)
 }
