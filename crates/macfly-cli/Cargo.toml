@@ -13,5 +13,6 @@ path = "src/main.rs"
 clap.workspace = true
 macfly-adapters = { path = "../macfly-adapters" }
 macfly-core = { path = "../macfly-core" }
+runemark.workspace = true
 serde.workspace = true
 serde_json.workspace = true

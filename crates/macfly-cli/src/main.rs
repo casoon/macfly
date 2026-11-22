@@ -1,4 +1,5 @@
 mod mcp;
+mod ui;
 
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
@@ -15,6 +16,7 @@ use macfly_core::error::MacflyError;
 use macfly_core::journal::AuditJournal;
 use macfly_core::model::DailyBrief;
 use macfly_core::plan::{PlanProposal, PlanStore, now_unix};
+use runemark::ColorMode;
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -28,6 +30,10 @@ struct Cli {
     #[arg(long, global = true, default_value = "pretty")]
     format: OutputFormat,
 
+    /// Farbausgabe im Pretty-Modus (auto respektiert TTY & NO_COLOR)
+    #[arg(long, global = true, default_value = "auto")]
+    color: ColorFlag,
+
     /// Profilname aus der Config (Default: `default_profile` aus config.json)
     #[arg(long, global = true)]
     profile: Option<String>,
@@ -38,6 +44,23 @@ struct Cli {
 
     #[command(subcommand)]
     command: Commands,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ColorFlag {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorFlag> for ColorMode {
+    fn from(value: ColorFlag) -> Self {
+        match value {
+            ColorFlag::Auto => ColorMode::Auto,
+            ColorFlag::Always => ColorMode::Always,
+            ColorFlag::Never => ColorMode::Never,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -113,7 +136,11 @@ enum NotesAction {
     /// Kompakte Übersicht aller Accounts & Ordner (inkl. Hierarchiepfad)
     Overview,
     /// Aufräum-Audit: leere Ordner, 1-Notiz-Ordner, Duplikat-Titel, älteste Notizen
-    Audit,
+    Audit {
+        /// Zeigt alle Einträge statt kompakter Vorschau
+        #[arg(long)]
+        details: bool,
+    },
     /// Listet Notizen (Metadaten, sortiert nach letzter Änderung)
     List {
         #[arg(long)]
@@ -267,12 +294,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             match cli.format {
-                OutputFormat::Pretty => {
-                    eprintln!("Fehler [{}]: {err}", err.code());
-                    if let Some(hint) = err.hint() {
-                        eprintln!("Hinweis: {hint}");
-                    }
-                }
+                OutputFormat::Pretty => ui::render_error(&err, cli.color.into()),
                 OutputFormat::Json | OutputFormat::Agent => {
                     if let Ok(json) = serde_json::to_string_pretty(&err.to_envelope()) {
                         println!("{json}");
@@ -413,35 +435,22 @@ fn handle_doctor(cli: &Cli) -> Result<(), MacflyError> {
     };
 
     match cli.format {
-        OutputFormat::Pretty => {
-            println!("MacFly Doctor");
-            println!("  OS:             {}", report.os);
-            println!(
-                "  osascript:      {}",
-                if report.osascript_available { "OK" } else { "FEHLT" }
-            );
-            println!(
-                "  Config:         {} ({})",
-                report.config_path,
-                if report.config_exists { "geladen" } else { "Defaults" }
-            );
-            println!("  Profil:         {}", report.active_profile);
-            println!("  Apple Notes:    {}", report.notes_access);
-            if let (Some(a), Some(n)) = (report.notes_accounts_count, report.notes_total_count) {
-                println!("    Bestand:      {a} Accounts, {n} Notizen");
-            }
-            println!("  Apple Mail:     {}", report.mail_access);
-            if let (Some(a), Some(u), Some(s)) = (
-                report.mail_accounts_count,
-                report.mail_unread_count,
-                report.mail_signatures_count,
-            ) {
-                println!("    Bestand:      {a} Accounts, {u} ungelesen, {s} Signaturen");
-            }
-            for h in &report.hints {
-                println!("  Hinweis:        {h}");
-            }
-        }
+        OutputFormat::Pretty => ui::render_doctor(
+            report.os,
+            report.osascript_available,
+            &report.config_path,
+            report.config_exists,
+            &report.active_profile,
+            &report.notes_access,
+            report.notes_accounts_count,
+            report.notes_total_count,
+            &report.mail_access,
+            report.mail_accounts_count,
+            report.mail_unread_count,
+            report.mail_signatures_count,
+            &report.hints,
+            cli.color.into(),
+        ),
         _ => emit_json(cli.format, &report)?,
     }
     Ok(())
@@ -456,62 +465,15 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
         NotesAction::Overview => {
             let ov = adapter.overview(profile_name, profile)?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!(
-                        "Apple Notes Übersicht (Profil: {} | {} Accounts | {} Ordner | {} Notizen)",
-                        ov.profile, ov.total_accounts, ov.total_folders, ov.total_notes
-                    );
-                    if ov.hidden_by_policy_folders > 0 {
-                        println!(
-                            "  ({} Ordner durch Policy ausgeblendet)",
-                            ov.hidden_by_policy_folders
-                        );
-                    }
-                    println!();
-                    for f in &ov.folders {
-                        let flag = if f.allowed_by_policy { "" } else { " [gesperrt]" };
-                        println!("  {:>4}  {:<42} ({}){}", f.note_count, f.path, f.account, flag);
-                    }
-                }
+                OutputFormat::Pretty => ui::render_notes_overview(&ov, cli.color.into()),
                 _ => emit_json(cli.format, &ov)?,
             }
             Ok(())
         }
-        NotesAction::Audit => {
+        NotesAction::Audit { details } => {
             let rep = adapter.audit(profile_name, profile)?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!(
-                        "Apple Notes Aufräum-Audit (Profil: {} | {} Ordner | {} Notizen)",
-                        rep.profile, rep.total_folders_scanned, rep.total_notes_scanned
-                    );
-                    println!();
-                    println!("Leere Ordner ({}):", rep.empty_folders.len());
-                    for f in &rep.empty_folders {
-                        println!("  - {} ({}) [id: {}]", f.path, f.account, f.id);
-                    }
-                    println!("\n1-Notiz-Ordner ({}):", rep.single_note_folders.len());
-                    for f in rep.single_note_folders.iter().take(25) {
-                        println!("  - {} ({})", f.path, f.account);
-                    }
-                    if rep.single_note_folders.len() > 25 {
-                        println!("  … (+{} weitere)", rep.single_note_folders.len() - 25);
-                    }
-                    println!("\nDoppelte Ordnernamen ({}):", rep.duplicate_folder_names.len());
-                    for (name, paths) in &rep.duplicate_folder_names {
-                        println!("  - '{}': {}", name, paths.join(" | "));
-                    }
-                    println!("\nPotenzielle Duplikat-Titel ({}):", rep.duplicate_titles.len());
-                    for g in rep.duplicate_titles.iter().take(15) {
-                        let folders: Vec<&str> = g.notes.iter().map(|n| n.folder_path.as_str()).collect();
-                        println!("  - '{}' ({}×): {}", g.normalized_title, g.count, folders.join(", "));
-                    }
-                    println!("\nÄlteste unveränderte Notizen (Top 10):");
-                    for n in rep.oldest_unmodified_notes.iter().take(10) {
-                        let date = n.modified_at.as_deref().and_then(|s| s.get(..10)).unwrap_or("?");
-                        println!("  - {date}  [{}]  {}", n.folder_path, n.title);
-                    }
-                }
+                OutputFormat::Pretty => ui::render_notes_audit(&rep, *details, cli.color.into()),
                 _ => emit_json(cli.format, &rep)?,
             }
             Ok(())
@@ -594,33 +556,7 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
         MailAction::Overview => {
             let ov = adapter.overview(profile_name, profile)?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!(
-                        "Apple Mail Übersicht (Profil: {} | {} Accounts | {} Postfächer | {} ungelesen)",
-                        ov.profile, ov.total_accounts, ov.total_mailboxes, ov.total_unread
-                    );
-                    println!("\nAccounts:");
-                    for a in &ov.accounts {
-                        println!(
-                            "  - {} ({}) [{} Postfächer]",
-                            a.name,
-                            a.email_addresses.join(", "),
-                            a.mailbox_count
-                        );
-                    }
-                    println!("\nPostfächer mit Nachrichten:");
-                    for m in ov.mailboxes.iter().filter(|m| m.message_count > 0 || m.unread_count > 0) {
-                        let flag = if m.allowed_by_policy { "" } else { " [gesperrt]" };
-                        println!(
-                            "  {:>4} ungel. / {:>5} ges.  {}/{}{}",
-                            m.unread_count, m.message_count, m.account, m.name, flag
-                        );
-                    }
-                    println!("\nSignaturen aus Apple Mail ({}):", ov.signatures.len());
-                    for s in &ov.signatures {
-                        println!("  - '{}' ({} Zeichen)", s.name, s.char_count);
-                    }
-                }
+                OutputFormat::Pretty => ui::render_mail_overview(&ov, cli.color.into()),
                 _ => emit_json(cli.format, &ov)?,
             }
             Ok(())
@@ -741,21 +677,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
             let proposal: PlanProposal = serde_json::from_str(&raw)?;
             let plan = store.create(profile_name, profile, proposal, *ttl_secs)?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!("Änderungsplan erstellt: {}", plan.plan_id);
-                    println!("  Risiko:          {:?}", plan.risk_level);
-                    println!("  Reversibilität:  {:?}", plan.reversibility);
-                    println!("  Hash:            {}", plan.plan_hash);
-                    println!("  Prüfcode:        {}", plan.approval_code);
-                    println!("\nGeplante Operationen:");
-                    for line in &plan.preview_lines {
-                        println!("  • {line}");
-                    }
-                    println!(
-                        "\nNächster Schritt zur Freigabe:\n  macfly plan approve {}",
-                        plan.plan_id
-                    );
-                }
+                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
                 _ => emit_json(cli.format, &plan)?,
             }
             Ok(())
@@ -786,18 +708,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
         PlanAction::Inspect { plan_id } => {
             let plan = store.load(plan_id)?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!("Plan:            {}", plan.plan_id);
-                    println!("Status:          {:?}", plan.status);
-                    println!("Profil:          {}", plan.profile);
-                    println!("Risiko:          {:?} ({:?})", plan.risk_level, plan.reversibility);
-                    println!("Hash:            {}", plan.plan_hash);
-                    println!("Prüfcode:        {}", plan.approval_code);
-                    println!("\nOperationen ({}):", plan.operations.len());
-                    for line in &plan.preview_lines {
-                        println!("  • {line}");
-                    }
-                }
+                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
                 _ => emit_json(cli.format, &plan)?,
             }
             Ok(())
@@ -854,12 +765,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                 cfg.script_timeout_secs,
             )?;
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!("Plan '{}' erfolgreich ausgeführt:", report.plan_id);
-                    for r in &report.results {
-                        println!("  ✓ {r}");
-                    }
-                }
+                OutputFormat::Pretty => ui::render_apply_report(&report, cli.color.into()),
                 _ => emit_json(cli.format, &report)?,
             }
             Ok(())
@@ -1006,31 +912,7 @@ fn handle_context(cli: &Cli, action: &ContextAction) -> Result<(), MacflyError> 
             };
 
             match cli.format {
-                OutputFormat::Pretty => {
-                    println!("MacFly Daily Brief (Profil: {})", brief.profile);
-                    println!("\nTermine (nächste 48h: {}):", brief.upcoming_events.len());
-                    for ev in &brief.upcoming_events {
-                        let start = ev.start_at.as_deref().and_then(|s| s.get(..16)).unwrap_or("?");
-                        println!("  • {start} [{}] {}", ev.calendar, ev.title);
-                    }
-                    println!("\nOffene Erinnerungen ({}):", brief.open_reminders.len());
-                    for r in &brief.open_reminders {
-                        let flag = if r.overdue { "!" } else { " " };
-                        println!("  {flag} [{}] {}", r.list, r.title);
-                    }
-                    println!("\nUngelesene Mails ({}):", brief.unread_mail_count);
-                    for m in &brief.unread_mails {
-                        println!("  • [{}] {} — {}", m.account, m.subject, m.sender);
-                    }
-                    println!("\nZuletzt geänderte Notizen ({}):", brief.recent_notes.len());
-                    for n in &brief.recent_notes {
-                        let date = n.modified_at.as_deref().and_then(|s| s.get(..10)).unwrap_or("?");
-                        println!("  • {date} [{}] {}", n.folder_path, n.title);
-                    }
-                    for w in &brief.warnings {
-                        println!("\nWarnung: {w}");
-                    }
-                }
+                OutputFormat::Pretty => ui::render_daily_brief(&brief, cli.color.into()),
                 _ => emit_json(cli.format, &brief)?,
             }
             Ok(())
