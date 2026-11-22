@@ -1,0 +1,22 @@
+version: 1
+terminal:
+  title: Use Case 5 · Executive Daily Brief, launchd Schedule & SKILL.md
+  cols: 76
+  rows: 23
+  theme: catppuccin-mocha
+steps:
+  - run: macfly context daily-brief
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m Executive Daily Brief\r\n  \e[2mCalendar (48h): \e[0m\e[36m4\e[0m   \e[2mOpen Tasks: \e[0m\e[1;93m7\e[0m   \e[2mUnread Mail: \e[0m\e[36m3\e[0m   \e[2mRecent Notes: \e[0m12\r\n\r\n"
+  - wait: 1000
+  - run: macfly schedule add morning-brief --every-minutes 60 -- context daily-brief
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m LaunchAgent Installed & Loaded\r\n  \e[2mLabel: \e[0mcom.casoon.macfly.morning-brief   \e[2mInterval: \e[0m60m\r\n  \e[2mPlist: \e[0m~/Library/LaunchAgents/com.casoon.macfly.morning-brief.plist\r\n\r\n"
+  - wait: 1000
+  - run: macfly skill export --output ./.claude/skills/macfly
+  - wait: 400
+  - output:
+      raw: "\e[1;92m✔\e[0m Agent Skill Exported\r\n  \e[2mPath: \e[0m./.claude/skills/macfly/SKILL.md\r\n"
+  - wait: 4500

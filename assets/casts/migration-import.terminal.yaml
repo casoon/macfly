@@ -1,0 +1,22 @@
+version: 1
+terminal:
+  title: Use Case 2 · Multi-Format Knowledge & Task Migration
+  cols: 76
+  rows: 24
+  theme: catppuccin-mocha
+steps:
+  - run: macfly notes import --input ./obsidian-vault --folder "00 · Inbox" --recursive
+  - wait: 450
+  - output:
+      raw: "\e[1;96m!\e[0m Multi-Format Notes Import Plan Created\r\n  \e[2mParsed files: \e[0m\e[36m42\e[0m (.md: 34, .html: 4, .json: 2, .csv: 2)\r\n  \e[2mTarget folder: \e[0m00 · Inbox   \e[2mPlan ID: \e[0m7c9e6679-7425-40de-944b-e07fc1f90ae7\r\n  \e[2mApproval code: \e[0m\e[1;93m8f4e2a\e[0m\r\n\r\n"
+  - wait: 1100
+  - run: macfly reminders import --input ./todoist-tasks.csv --list "Work"
+  - wait: 450
+  - output:
+      raw: "\e[1;96m!\e[0m Reminders Import Plan Created\r\n  \e[2mTasks parsed: \e[0m\e[36m18\e[0m (RFC-4180 CSV with due_date, priority, notes)\r\n  \e[2mTarget list: \e[0mWork         \e[2mApproval code: \e[0m\e[1;93m3d9c1b\e[0m\r\n\r\n"
+  - wait: 1100
+  - run: macfly notes export --output ./git-knowledge-base --folder "10 · Work"
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m Notes Export Completed\r\n  \e[2mExported: \e[0m\e[1;92m64\e[0m Markdown files with YAML frontmatter (id, folder, revision)\r\n  \e[2mOutput: \e[0m./git-knowledge-base\r\n"
+  - wait: 4500

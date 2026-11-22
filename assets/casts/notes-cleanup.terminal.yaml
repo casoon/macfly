@@ -1,0 +1,27 @@
+version: 1
+terminal:
+  title: Use Case 1 · Apple Notes Audit & SHA-256 Reorganization Plan
+  cols: 76
+  rows: 25
+  theme: catppuccin-mocha
+steps:
+  - run: macfly notes audit
+  - wait: 450
+  - output:
+      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit (profile: default)\r\n\r\n  \e[2mTotal notes: \e[0m825   \e[2mFolders: \e[0m105   \e[2mEmpty: \e[0m\e[1;93m3\e[0m   \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n\r\n  \e[1;96mSingle-note folders (consolidation candidates):\e[0m\r\n    \e[33m!\e[0m 'Q1 Taxes' (1 note) -> move to '10 · Work / Finance'\r\n    \e[33m!\e[0m 'Rust Ideas' (1 note) -> move to '20 · Engineering'\r\n    \e[2m…and 22 more single-note folders\e[0m\r\n\r\n"
+  - wait: 1100
+  - run: macfly plan create --file reorganize-notes.json
+  - wait: 450
+  - output:
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mf47ac10b-58cc-4372-a567-0e02b2c3d479\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718   \e[2mApproval code: \e[0m\e[1;93ma1b2c3\e[0m\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
+  - wait: 1100
+  - run: macfly plan approve f47ac10b-58cc-4372-a567-0e02b2c3d479 --code a1b2c3
+  - wait: 400
+  - output:
+      raw: "\e[1;92m✔\e[0m Plan Approved (TTY verified · SHA-256 integrity intact)\r\n\r\n"
+  - wait: 700
+  - run: macfly plan apply f47ac10b-58cc-4372-a567-0e02b2c3d479
+  - wait: 500
+  - output:
+      raw: "\e[1;92m✔\e[0m Plan Applied\r\n  \e[2mSucceeded: \e[0m\e[1;92m27\e[0m   \e[2mFailed: \e[0m0   \e[2mJournal: \e[0m~/.local/share/macfly/journal.jsonl\r\n"
+  - wait: 4500

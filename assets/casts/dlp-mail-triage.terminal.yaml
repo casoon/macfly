@@ -1,0 +1,22 @@
+version: 1
+terminal:
+  title: Use Case 4 · Read-Side DLP Firewall & Safe Apple Mail Drafts
+  cols: 76
+  rows: 23
+  theme: catppuccin-mocha
+steps:
+  - run: macfly mail search --query "Invoice" --limit 2
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m Mail Search: 'Invoice' (2 matches · DLP active · untrusted_external)\r\n\r\n  \e[36m1.\e[0m \e[1mInvoice #2026-114 · Wire Transfer Details\e[0m\r\n     \e[2mFrom: \e[0mbilling@acme.example   \e[2mAccount: \e[0mExchange\r\n     \e[2mBody: \e[0mWire EUR 4,200 to \e[1;93m[REDACTED:IBAN]\e[0m · key \e[1;93m[REDACTED:API_KEY]\e[0m\r\n\r\n"
+  - wait: 1100
+  - run: macfly mail signatures
+  - wait: 400
+  - output:
+      raw: "Signatures from Apple Mail (Single Point of Truth):\r\n  • 'Corporate Standard' (native Apple Mail signature · 0.24s)\r\n\r\n"
+  - wait: 900
+  - run: macfly plan create --file draft-reply.json
+  - wait: 450
+  - output:
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail.create_draft · send_enabled: false)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)   \e[2mApproval code: \e[0m\e[1;93m9c4a1e\e[0m\r\n"
+  - wait: 4500

@@ -6,6 +6,8 @@ on:
     paths:
       - 'site/**'
       - 'pages/**'
+      - 'assets/**'
+      - 'CHANGELOG.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

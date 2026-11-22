@@ -1,7 +1,9 @@
 ---
+import { readFile } from 'node:fs/promises';
 import {
   Badge,
   Badges,
+  CallToAction,
   CodeBlock,
   Compare,
   Facts,
@@ -10,10 +12,19 @@ import {
   Hero,
   Install,
   Quickstart,
-  Terminal,
+  ReleaseHighlights,
 } from '@casoon/pages-theme/components';
 import Base from '@casoon/pages-theme/layouts/Base.astro';
-import demo from '../macfly-demo.txt?raw';
+import { parseChangelog } from '@casoon/pages-theme/lib/changelog';
+import { url } from '@casoon/pages-theme/url';
+import config from 'virtual:casoon-pages/config';
+import { castDemo } from '../showcase';
+
+const latestRelease = config.changelog
+  ? parseChangelog(await readFile(config.changelog, 'utf8')).find(
+      (r) => r.version.toLowerCase() !== 'unreleased'
+    )
+  : undefined;
 
 const quickstartCode = `# 1. Install from crates.io & verify macOS access
 cargo install macfly
@@ -31,10 +42,10 @@ macfly context daily-brief
 macfly notes export --output ./notes-backup --folder "10 · Work"
 macfly notes import --input ./notion-or-evernote --folder "00 · Inbox" --recursive
 macfly mail export --output ./mail-archive --query "Invoice"
+
 # 4. Cross-app 360° dossiers, Typst reports, SKILL.md & launchd schedules
 macfly context person "Acme"
 macfly context meeting-prep --query "Kickoff" --create-note
-macfly context weekly-review
 macfly report person "Acme" --output ./dossier-acme.typ
 macfly skill export --output ./.claude/skills/macfly`;
 ---
@@ -62,7 +73,10 @@ macfly skill export --output ./.claude/skills/macfly`;
         { label: 'Export', command: 'macfly notes export --output ./backup' },
       ]}
     />
-    <Terminal slot="output" title="macfly doctor & plan create · styled with runemark" dots ansi={demo} />
+    <Fragment
+      slot="output"
+      set:html={castDemo('hero', 'cw-hero', 'macfly · doctor, notes audit & 360° dossier', 'hero-narrow')}
+    />
   </Hero>
 
   <Facts
@@ -137,6 +151,8 @@ macfly skill export --output ./.claude/skills/macfly`;
   />
 
   <Compare
+    title="Next to cloud OAuth connectors"
+    lead="Routing macOS automation through local apps and a Rust data firewall keeps credentials on-device and unlocks two-way migrations across every account."
     columns={[
       { title: 'Cloud OAuth Connectors', label: 'Direct provider integration' },
       { title: 'MacFly + Local AI', label: 'Local-first on macOS', badge: 'Privacy-first' },
@@ -172,6 +188,7 @@ macfly skill export --output ./.claude/skills/macfly`;
         ],
       },
     ]}
+    link={{ label: 'Explore real-world use cases', href: url('demo/') }}
   />
 
   <Quickstart
@@ -187,4 +204,12 @@ macfly skill export --output ./.claude/skills/macfly`;
   >
     <CodeBlock title="Terminal, migrations & MCP setup" lang="bash" code={quickstartCode} />
   </Quickstart>
+
+  {latestRelease && <ReleaseHighlights release={latestRelease} />}
+
+  <CallToAction
+    title="See MacFly across five real-world macOS workflows."
+    href={url('demo/')}
+    label="Explore Use Cases"
+  />
 </Base>

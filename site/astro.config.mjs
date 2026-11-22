@@ -9,11 +9,20 @@ export default defineConfig({
     casoonPages({
       name: 'MacFly',
       description:
-        'Safe, fast, AI-ready macOS automation CLI & data firewall in pure Rust — for Apple Notes, Apple Mail, and local agents.',
+        'Safe, deterministic macOS automation CLI, two-way migration toolkit & MCP server in pure Rust — with a read-side DLP firewall and SHA-256 plan approval.',
+      tagline: 'Safe, deterministic macOS automation & migration',
       repo: 'casoon/macfly',
       license: 'MIT OR Apache-2.0',
-      changelog: false,
-      showcase: false,
+      packages: [
+        { label: 'crates.io', href: 'https://crates.io/crates/macfly' },
+        { label: 'docs.rs', href: 'https://docs.rs/macfly' },
+        { label: 'GitHub Releases', href: 'https://github.com/casoon/macfly/releases' },
+      ],
+      demo: 'Use Cases',
+      showcase: './src/showcase.ts',
+      showcaseLead:
+        'Command-to-output examples of MacFly in action — rendered declaratively with castwright and styled by runemark.',
+      changelog: '../CHANGELOG.md',
       docsGroups: {
         guide: 'Guide',
         architecture: 'Architecture',

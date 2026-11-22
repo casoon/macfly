@@ -1,0 +1,17 @@
+version: 1
+terminal:
+  title: Use Case 3 · 360° Cross-App Client Dossier & Typst PDF Report
+  cols: 76
+  rows: 24
+  theme: catppuccin-mocha
+steps:
+  - run: macfly context person "Acme"
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m 360° Person & Project Dossier: 'Acme'\r\n\r\n  \e[2mTotal hits: \e[0m\e[36m14\e[0m   \e[2mContacts: \e[0m2   \e[2mNotes: \e[0m5   \e[2mMail: \e[0m4   \e[2mCalendar: \e[0m2   \e[2mTasks: \e[0m1\r\n\r\n  \e[1;96mMatching Contacts (2):\e[0m\r\n    \e[36mℹ\e[0m Alex Rivera (Acme GmbH) · alex@acme.example · +49 30 5550192\r\n  \e[1;96mMatching Apple Notes (5):\e[0m\r\n    \e[36mℹ\e[0m [10 · Work] Acme Architecture & SLA Review (2026-11-18)\r\n  \e[1;96mRecent Emails (4):\e[0m\r\n    \e[36mℹ\e[0m [Exchange] Q4 Contract & Billing IBAN [REDACTED:IBAN] (2026-11-20)\r\n\r\n"
+  - wait: 1200
+  - run: macfly report person "Acme" --output ./dossier-acme.typ
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m Report Dossier Exported\r\n  \e[2mFormat: \e[0mTypst (.typ)   \e[2mPath: \e[0m./dossier-acme.typ\r\n  \e[2mNext: \e[0m\e[36mtypst compile ./dossier-acme.typ ./dossier-acme.pdf\e[0m\r\n"
+  - wait: 4500

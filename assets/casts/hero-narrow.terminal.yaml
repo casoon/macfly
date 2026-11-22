@@ -1,0 +1,22 @@
+version: 1
+terminal:
+  title: macfly · macOS automation
+  cols: 50
+  rows: 22
+  theme: catppuccin-mocha
+steps:
+  - run: macfly doctor
+  - wait: 400
+  - output:
+      raw: "\e[1;92m✔\e[0m macOS Automation Doctor\r\n  \e[2mPassed: \e[0m\e[1;92m6\e[0m   \e[2mBlocked: \e[0m0\r\n  \e[92m✔\e[0m Notes · Mail · Contacts · Calendar\r\n  \e[92m✔\e[0m Reminders · Safari · Shortcuts\r\n\r\n"
+  - wait: 900
+  - run: macfly notes audit
+  - wait: 450
+  - output:
+      raw: "\e[1;93m⚠\e[0m Notes Hygiene Audit\r\n  \e[2mNotes: \e[0m825   \e[2mFolders: \e[0m105\r\n  \e[2mEmpty: \e[0m\e[1;93m3\e[0m     \e[2mSingle-note: \e[0m\e[1;93m24\e[0m\r\n\r\n"
+  - wait: 900
+  - run: macfly context person "Acme"
+  - wait: 450
+  - output:
+      raw: "\e[1;92m✔\e[0m 360° Dossier: 'Acme'\r\n  \e[2mNotes: \e[0m5  \e[2mMail: \e[0m6  \e[2mCal: \e[0m2  \e[2mTasks: \e[0m1\r\n  \e[92m✔\e[0m DLP active · 2 secrets redacted\r\n"
+  - wait: 4500
