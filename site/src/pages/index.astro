@@ -30,16 +30,15 @@ import demo from '../macfly-demo.txt?raw';
       <Badge>MCP stdio</Badge>
       <Badge>MIT / Apache-2.0</Badge>
     </Badges>
+    <Install
+      commands={[
+        { label: 'Cargo', command: 'cargo install macfly' },
+        { label: 'Verify', command: 'macfly doctor' },
+        { label: 'MCP', command: 'macfly mcp --profile default' },
+      ]}
+    />
     <Terminal slot="output" title="macfly doctor & plan create · styled with runemark" dots ansi={demo} />
   </Hero>
-
-  <Install
-    commands={[
-      { label: 'Cargo', command: 'cargo install macfly' },
-      { label: 'Verify', command: 'macfly doctor' },
-      { label: 'MCP', command: 'macfly mcp --profile default' },
-    ]}
-  />
 
   <Facts
     items={[
