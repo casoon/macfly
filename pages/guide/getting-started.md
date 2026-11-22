@@ -96,6 +96,15 @@ macfly mail export --output ./mail-archive --query "Invoice" --limit 20
 macfly calendar events --days 7
 macfly reminders list --overdue
 
-# Multi-app Context Pack (Calendar + Reminders + Unread Mail + Recent Notes)
+# Multi-app Context Packs & Typst/Markdown Dossiers
 macfly context daily-brief --format agent
+macfly context person "Acme"
+macfly context meeting-prep --query "Kickoff" --create-note --folder "00 · Inbox"
+macfly context weekly-review
+macfly report person "Acme" --output ./dossier-acme.typ
+
+# Export Agent SKILL.md & manage macOS launchd routines
+macfly skill export --output ./.claude/skills/macfly
+macfly schedule install --name morning-brief --task daily-brief --hour 7 --minute 30 --dry-run
+macfly schedule list
 ```

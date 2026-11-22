@@ -31,8 +31,12 @@ macfly context daily-brief
 macfly notes export --output ./notes-backup --folder "10 · Work"
 macfly notes import --input ./notion-or-evernote --folder "00 · Inbox" --recursive
 macfly mail export --output ./mail-archive --query "Invoice"
-macfly reminders import --input ./todoist.csv --list "Work"
-macfly safari to-note --folder "30 · Research"`;
+# 4. Cross-app 360° dossiers, Typst reports, SKILL.md & launchd schedules
+macfly context person "Acme"
+macfly context meeting-prep --query "Kickoff" --create-note
+macfly context weekly-review
+macfly report person "Acme" --output ./dossier-acme.typ
+macfly skill export --output ./.claude/skills/macfly`;
 ---
 
 <Base>

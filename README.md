@@ -12,9 +12,11 @@ Local, deterministic macOS automation CLI, migration toolkit, and `stdio` MCP se
 - **Apple Calendar & Reminders** — upcoming events, open/overdue reminders, unified 4-app `daily-brief` context pack, **Calendar/Reminders Markdown export**, and **multi-format Reminders import** (`.md`, `.txt`, `.json`, `.jsonl`, `.csv`)
 - **Apple Safari** — inspect open browser tabs (`safari tabs`), export tabs to Markdown (`safari export`), or migrate open research tabs directly into an Apple Note via plan (`safari to-note`)
 - **Apple Shortcuts** — allowlist-gated bridge to `shortcuts list` and `shortcuts run` (Focus modes, HomeKit scenes, modern App Intents)
+- **Cross-app Context Packs & Typst/PDF Dossiers** — `context daily-brief`, `context person "<Name/Email>"` (360° dossier across 5 apps), `context meeting-prep [--create-note]`, `context weekly-review`, plus `macfly report` for Typst (`.typ` / `renderreport`), Markdown (`.md`), or PDF (`.pdf`) dossiers
+- **Agent Skill Exporter & `launchd` Scheduler** — `macfly skill export` generates a ready-to-use `SKILL.md` for Claude Code, Codex, Cursor, or Antigravity; `macfly schedule` manages native macOS `LaunchAgents` without a custom background daemon
 - **Read-side Data Firewall (DLP)** — profile-based allowlists/denylists (`deny_folders`, `deny_mailboxes`) plus automatic linear-time regex redaction of private keys, API keys, IBANs, credit cards, and 6-digit OTP codes before output reaches any LLM
 - **Transactional change plans & `runemark` terminal UI** — every write goes through `plan create → inspect → approve → apply` with canonical SHA-256 plan hashing, tamper detection, expiry TTL, interactive TTY confirmation, a local JSONL audit journal, and semantic terminal reports powered by [`runemark`](https://casoon.github.io/runemark/)
-- **Built-in `stdio` MCP server** — exposes 15 read & `plan_create`/`plan_inspect` tools; `plan_approve` and `plan_apply` are intentionally excluded from MCP so agents can propose changes but never self-approve them
+- **Built-in `stdio` MCP server** — exposes 19 read, context-pack & `plan_create`/`plan_inspect` tools; `plan_approve` and `plan_apply` are intentionally excluded from MCP so agents can propose changes but never self-approve them
 
 ## Why Rust + AppleScript/JXA
 
@@ -74,8 +76,16 @@ macfly safari export --output ./research-tabs.md
 macfly safari to-note --folder "00 · Inbox" --title "Research Links"
 macfly shortcuts list
 
-# Multi-app context pack
+# Multi-app context packs & Typst / PDF dossiers
 macfly context daily-brief --format agent
+macfly context person "Acme"
+macfly context meeting-prep --query "Kickoff" --create-note --folder "00 · Inbox"
+macfly context weekly-review
+macfly report person "Acme" --output ./dossier-acme.typ
+
+# Agent SKILL.md export & macOS launchd routines
+macfly skill export --output ./.claude/skills/macfly
+macfly schedule install --name morning-brief --task daily-brief --hour 7 --minute 30 --dry-run
 ```
 
 ## Configuration

@@ -38,7 +38,7 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 }
 ```
 
-## Available MCP tools (15 total)
+## Available MCP tools (19 total)
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -55,8 +55,21 @@ Silicon** (such as Ollama, LM Studio, `llama.cpp`, or MLX):
 | `reminders_list` | Read | Open or overdue reminders |
 | `safari_tabs` | Read | Currently open Safari browser tabs (title & URL) |
 | `shortcuts_list` | Read | Available macOS Shortcuts & allowlist status |
+| `context_daily_brief` | Read | 4-app morning briefing (events 48h, reminders, unread mails, recent notes) |
+| `context_person` | Read | 360° dossier for a person/company across Contacts, Mail, Notes, Calendar & Reminders |
+| `context_meeting_prep` | Read | Prepare for upcoming/matching calendar event with related contacts, mails & notes |
+| `context_weekly_review` | Read | Weekly review of modified notes, unread mails, overdue tasks, events & Safari tabs |
 | `plan_create` | Propose | Validate and store a proposed change plan (no execution) |
 | `plan_inspect` | Read | Inspect status, hash, and preview of a stored plan |
+
+## Ready-to-use `SKILL.md` export
+
+For terminal agents (Claude Code, Codex, Cursor, Antigravity), export a
+tailored `SKILL.md` with one command:
+
+```bash
+macfly skill export --output ./.claude/skills/macfly
+```
 
 ## Why `approve` and `apply` are missing from MCP
 
