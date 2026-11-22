@@ -4,10 +4,25 @@ description: Build MacFly, initialize your central config, verify macOS permissi
 order: 1
 ---
 
-## 1. Build from source
+## 1. Install MacFly
 
-Requires Rust (`cargo`, Edition 2024) on macOS. No Xcode project or Node.js
-runtime is required.
+### Direct binary installer (recommended — no Rust/Cargo required)
+
+Downloads the prebuilt macOS binary (`aarch64-apple-darwin` or `x86_64-apple-darwin`) from GitHub Releases, verifies its SHA-256 checksum against `SHA256SUMS`, and installs to `~/.local/bin/macfly`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
+```
+
+Optional environment overrides: `MACFLY_VERSION=v0.4.0` and `INSTALL_DIR=/usr/local/bin`.
+
+### Via Cargo or from source
+
+```bash
+cargo install macfly
+```
+
+Or build from a local clone (`cargo`, Edition 2024 — no Xcode project or Node.js runtime required):
 
 ```bash
 git clone https://github.com/casoon/macfly.git

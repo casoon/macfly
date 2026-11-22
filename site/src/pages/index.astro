@@ -58,9 +58,9 @@ macfly skill export --output ./.claude/skills/macfly`;
   >
     <Install
       commands={[
+        { label: 'Installer', command: 'curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash' },
         { label: 'Cargo', command: 'cargo install macfly' },
         { label: 'Verify', command: 'macfly doctor' },
-        { label: 'Export', command: 'macfly notes export --output ./backup' },
       ]}
     />
     <p>
@@ -193,9 +193,9 @@ macfly skill export --output ./.claude/skills/macfly`;
 
   <Quickstart
     title="Get started in two minutes"
-    lead="Install from crates.io, verify macOS permissions, and audit, automate, or migrate your Apple apps."
+    lead="Install the prebuilt macOS binary (no Rust required) or via crates.io, verify macOS permissions, and audit, automate, or migrate your Apple apps."
     steps={[
-      'Install the binary: <code>cargo install macfly</code>',
+      'Install via shell script (no Cargo): <code>curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash</code> (or <code>cargo install macfly</code>)',
       'Check macOS access &amp; create config: <code>macfly doctor</code> · <code>macfly config init</code>',
       'Audit &amp; clean up: <code>macfly notes audit</code> · <code>macfly contacts audit</code>',
       'Export or import: <code>macfly notes export --output ./backup</code> · <code>macfly notes import --input ./docs --folder "00 · Inbox" --recursive</code>',

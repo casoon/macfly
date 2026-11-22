@@ -29,13 +29,18 @@ Local, deterministic macOS automation CLI, migration toolkit, and `stdio` MCP se
 ## Requirements
 
 - **macOS** (Apple Silicon or Intel)
-- **Rust** toolchain (`cargo`, Edition 2024)
 - macOS Automation (TCC) permission for the apps you use (prompted automatically on first run; verified via `macfly doctor`)
+- *(Optional, only if building from source)* Rust toolchain (`cargo`, Edition 2024)
 
 ## Installation & quick start
 
 ```sh
+# Direct macOS binary installer (no Rust/Cargo required, SHA-256 verified):
+curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
+
+# Or install via Cargo:
 cargo install macfly
+
 macfly doctor
 macfly config init
 ```
