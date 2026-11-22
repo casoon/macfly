@@ -287,6 +287,46 @@ pub struct DailyBrief {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonContext {
+    pub schema_version: String,
+    pub profile: String,
+    pub query: String,
+    pub generated_at_unix: u64,
+    pub contacts: Vec<ContactSummary>,
+    pub recent_mails: Vec<MailMessageSummary>,
+    pub matching_notes: Vec<NoteSummary>,
+    pub upcoming_events: Vec<CalendarEvent>,
+    pub open_reminders: Vec<ReminderItem>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeetingPrepContext {
+    pub schema_version: String,
+    pub profile: String,
+    pub query: String,
+    pub generated_at_unix: u64,
+    pub target_event: Option<CalendarEvent>,
+    pub related_contacts: Vec<ContactSummary>,
+    pub related_mails: Vec<MailMessageSummary>,
+    pub related_notes: Vec<NoteSummary>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeeklyReviewContext {
+    pub schema_version: String,
+    pub profile: String,
+    pub generated_at_unix: u64,
+    pub recent_notes: Vec<NoteSummary>,
+    pub unread_mails: Vec<MailMessageSummary>,
+    pub overdue_reminders: Vec<ReminderItem>,
+    pub upcoming_events: Vec<CalendarEvent>,
+    pub open_safari_tabs: Vec<SafariTab>,
+    pub warnings: Vec<String>,
+}
+
 pub fn compute_revision_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());

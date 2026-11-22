@@ -6,3 +6,6 @@ pub mod import;
 pub mod journal;
 pub mod model;
 pub mod plan;
+pub mod report_export;
+pub mod schedule;
+pub mod skill;

@@ -2,6 +2,9 @@ use std::io::{self, BufRead, Write};
 
 use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
 use macfly_adapters::contacts::ContactsAdapter;
+use macfly_adapters::context::{
+    build_daily_brief, build_meeting_prep, build_person_context, build_weekly_review,
+};
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::safari::SafariAdapter;
@@ -235,6 +238,38 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "context_daily_brief",
+            "description": "4-App Morgen-/Tagesbriefing: Termine (48h), offene Erinnerungen, ungelesene E-Mails und kürzlich geänderte Notizen.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "context_person",
+            "description": "360°-Kunden-/Personen-Dossier über Contacts, Mail, Notes, Calendar und Reminders.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": { "type": "string" },
+                    "limit": { "type": "integer", "default": 10 }
+                }
+            }
+        },
+        {
+            "name": "context_meeting_prep",
+            "description": "Bereitet den nächsten oder einen gesuchten Kalendertermin mit passenden Kontakten, E-Mails und Notizen vor.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" }
+                }
+            }
+        },
+        {
+            "name": "context_weekly_review",
+            "description": "Wochenrückblick über geänderte Notizen, ungelesene Mails, überfällige Erinnerungen, Termine (7d) und offene Safari-Tabs.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "plan_create",
             "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus — der Nutzer gibt den Plan separat im Terminal frei.",
             "inputSchema": {
@@ -360,6 +395,41 @@ fn dispatch_tool(
             let query = args.get("query").and_then(Value::as_str);
             Ok(serde_json::to_value(sf.tabs(query)?)?)
         }
+        "context_daily_brief" => Ok(serde_json::to_value(build_daily_brief(
+            profile_name,
+            profile,
+            cfg.script_timeout_secs,
+            10,
+            10,
+        ))?),
+        "context_person" => {
+            let q = args
+                .get("query")
+                .and_then(Value::as_str)
+                .ok_or_else(|| MacflyError::PlanError("Parameter `query` fehlt".to_string()))?;
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(10) as usize;
+            Ok(serde_json::to_value(build_person_context(
+                profile_name,
+                profile,
+                cfg.script_timeout_secs,
+                q,
+                limit,
+            ))?)
+        }
+        "context_meeting_prep" => {
+            let q = args.get("query").and_then(Value::as_str);
+            Ok(serde_json::to_value(build_meeting_prep(
+                profile_name,
+                profile,
+                cfg.script_timeout_secs,
+                q,
+            ))?)
+        }
+        "context_weekly_review" => Ok(serde_json::to_value(build_weekly_review(
+            profile_name,
+            profile,
+            cfg.script_timeout_secs,
+        ))?),
         "plan_create" => {
             let proposal: PlanProposal = serde_json::from_value(args.clone())?;
             let store = PlanStore::default_store();

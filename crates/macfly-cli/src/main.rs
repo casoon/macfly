@@ -9,20 +9,30 @@ use std::process::{Command, ExitCode};
 use clap::{Parser, Subcommand, ValueEnum};
 use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
 use macfly_adapters::contacts::ContactsAdapter;
+use macfly_adapters::context::{
+    build_daily_brief, build_meeting_prep, build_person_context, build_weekly_review,
+};
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
-use macfly_core::config::Config;
+use macfly_core::config::{Config, data_dir};
 use macfly_core::error::MacflyError;
 use macfly_core::import::{
     is_supported_note_file, is_supported_reminder_file, parse_notes_from_str,
     parse_reminders_from_str,
 };
 use macfly_core::journal::AuditJournal;
-use macfly_core::model::DailyBrief;
-use macfly_core::plan::{PlanOperation, PlanProposal, PlanStore, now_unix};
+use macfly_core::plan::{PlanOperation, PlanProposal, PlanStore};
+use macfly_core::report_export::{
+    daily_brief_to_typst, person_context_to_markdown, person_context_to_typst,
+    weekly_review_to_typst,
+};
+use macfly_core::schedule::{
+    job_label, launch_agents_dir, list_installed_jobs, render_launchd_plist,
+};
+use macfly_core::skill::{export_skill_file, render_agent_skill_markdown};
 use runemark::ColorMode;
 use serde::Serialize;
 
@@ -126,10 +136,25 @@ enum Commands {
         #[command(subcommand)]
         action: PlanAction,
     },
-    /// Anwendungsübergreifende Context Packs für KI-Briefings
+    /// Anwendungsübergreifende Context Packs (Daily Brief, 360° Person, Meeting Prep, Weekly Review)
     Context {
         #[command(subcommand)]
         action: ContextAction,
+    },
+    /// Druckfertige Dossiers & Reports (Typst / renderreport / PDF / Markdown)
+    Report {
+        #[command(subcommand)]
+        action: ReportAction,
+    },
+    /// Agent-Skill (SKILL.md) für Claude Code, Codex, Cursor oder lokale Agenten ausgeben
+    Skill {
+        #[command(subcommand)]
+        action: SkillAction,
+    },
+    /// Zeitgesteuerte lokale Routinen über macOS launchd (LaunchAgents) verwalten
+    Schedule {
+        #[command(subcommand)]
+        action: ScheduleAction,
     },
     /// Audit-Journal ausgeführter Änderungspläne anzeigen
     History {
@@ -411,12 +436,93 @@ enum PlanAction {
 
 #[derive(Subcommand)]
 enum ContextAction {
-    /// Kompaktes Morgen-/Tages-Briefing (ungelesene Mails + letzte Notizen)
+    /// Kompaktes Morgen-/Tages-Briefing (Termine 48h + Erinnerungen + ungelesene Mails + Notizen)
     DailyBrief {
         #[arg(long, default_value_t = 10)]
         mail_limit: usize,
         #[arg(long, default_value_t = 10)]
         notes_limit: usize,
+    },
+    /// 360°-Kunden-/Personen-Dossier über Contacts, Mail, Notes, Calendar und Reminders
+    Person {
+        query: String,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Bereitet den nächsten (oder gesuchten) Kalendertermin mit Mails, Kontakten & Notizen vor
+    MeetingPrep {
+        #[arg(long)]
+        query: Option<String>,
+        /// Erzeugt direkt einen Änderungsplan für eine vorbereitete Meeting-Notiz
+        #[arg(long)]
+        create_note: bool,
+        #[arg(long, default_value = "00 · Eingang")]
+        folder: String,
+    },
+    /// Wochenrückblick über geänderte Notizen, ungelesene Mails, überfällige Aufgaben & Safari-Tabs
+    WeeklyReview,
+}
+
+#[derive(Subcommand)]
+enum ReportAction {
+    /// Erzeugt ein 360°-Dossier für eine Person/Firma als Typst (.typ), Markdown (.md) oder PDF (.pdf)
+    Person {
+        query: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Erzeugt das Daily Brief als Typst (.typ) oder PDF (.pdf)
+    DailyBrief {
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Erzeugt das Weekly Review als Typst (.typ) oder PDF (.pdf)
+    WeeklyReview {
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum SkillAction {
+    /// Gibt die fertige SKILL.md auf stdout aus
+    Show,
+    /// Speichert SKILL.md in ein Zielverzeichnis oder eine Datei (z. B. .claude/skills/macfly)
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ScheduleTask {
+    DailyBrief,
+    WeeklyReview,
+    NotesAudit,
+}
+
+#[derive(Subcommand)]
+enum ScheduleAction {
+    /// Listet installierte MacFly LaunchAgents (~/Library/LaunchAgents/com.casoon.macfly.*.plist)
+    List,
+    /// Richtet eine tägliche lokale Routine über macOS launchd ein
+    Install {
+        #[arg(long)]
+        name: String,
+        #[arg(long, value_enum)]
+        task: ScheduleTask,
+        #[arg(long, default_value_t = 7)]
+        hour: u8,
+        #[arg(long, default_value_t = 30)]
+        minute: u8,
+        /// Nur die generierte .plist anzeigen, ohne sie zu installieren
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Entfernt einen MacFly LaunchAgent
+    Remove {
+        #[arg(long)]
+        name: String,
     },
 }
 
@@ -468,6 +574,9 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Safari { action } => handle_safari(cli, action),
         Commands::Plan { action } => handle_plan(cli, action),
         Commands::Context { action } => handle_context(cli, action),
+        Commands::Report { action } => handle_report(cli, action),
+        Commands::Skill { action } => handle_skill(cli, action),
+        Commands::Schedule { action } => handle_schedule(cli, action),
         Commands::History { limit } => handle_history(cli, *limit),
         Commands::Mcp => {
             let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
@@ -1423,79 +1532,339 @@ fn print_contacts_list(
 fn handle_context(cli: &Cli, action: &ContextAction) -> Result<(), MacflyError> {
     let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
     let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
-    let notes = NotesAdapter::new(cfg.script_timeout_secs);
-    let mail = MailAdapter::new(cfg.script_timeout_secs);
-    let cal = CalendarAdapter::new(cfg.script_timeout_secs);
-    let rem = RemindersAdapter::new(cfg.script_timeout_secs);
 
     match action {
         ContextAction::DailyBrief {
             mail_limit,
             notes_limit,
         } => {
-            let mut warnings = Vec::new();
-            let upcoming_events = match cal.events(2, None, 15) {
-                Ok(c) => c.events,
-                Err(e) => {
-                    warnings.push(format!("Calendar nicht verfügbar: {e}"));
-                    Vec::new()
-                }
-            };
-            let open_reminders = match rem.list(None, false, 15) {
-                Ok(r) => r.reminders,
-                Err(e) => {
-                    warnings.push(format!("Reminders nicht verfügbar: {e}"));
-                    Vec::new()
-                }
-            };
-            let unread_mails = match mail.list(
+            let brief = build_daily_brief(
                 profile_name,
                 profile,
-                &ListMailQuery {
-                    mailbox: Some("INBOX".to_string()),
-                    unread_only: true,
-                    limit: *mail_limit,
-                    scan_limit: 150,
-                    ..Default::default()
-                },
-            ) {
-                Ok(m) => m.messages,
-                Err(e) => {
-                    warnings.push(format!("Mail nicht verfügbar: {e}"));
-                    Vec::new()
-                }
-            };
-
-            let recent_notes = match notes.list(
-                profile_name,
-                profile,
-                &ListNotesQuery {
-                    limit: *notes_limit,
-                    ..Default::default()
-                },
-            ) {
-                Ok(n) => n.notes,
-                Err(e) => {
-                    warnings.push(format!("Notes nicht verfügbar: {e}"));
-                    Vec::new()
-                }
-            };
-
-            let brief = DailyBrief {
-                schema_version: "1.0".to_string(),
-                profile: profile_name.to_string(),
-                generated_at_unix: now_unix(),
-                upcoming_events,
-                open_reminders,
-                unread_mail_count: unread_mails.len(),
-                unread_mails,
-                recent_notes,
-                warnings,
-            };
-
+                cfg.script_timeout_secs,
+                *mail_limit,
+                *notes_limit,
+            );
             match cli.format {
                 OutputFormat::Pretty => ui::render_daily_brief(&brief, cli.color.into()),
                 _ => emit_json(cli.format, &brief)?,
+            }
+            Ok(())
+        }
+        ContextAction::Person { query, limit } => {
+            let ctx = build_person_context(
+                profile_name,
+                profile,
+                cfg.script_timeout_secs,
+                query,
+                *limit,
+            );
+            match cli.format {
+                OutputFormat::Pretty => ui::render_person_context(&ctx, cli.color.into()),
+                _ => emit_json(cli.format, &ctx)?,
+            }
+            Ok(())
+        }
+        ContextAction::MeetingPrep {
+            query,
+            create_note,
+            folder,
+        } => {
+            let prep = build_meeting_prep(
+                profile_name,
+                profile,
+                cfg.script_timeout_secs,
+                query.as_deref(),
+            );
+            if *create_note {
+                let title = format!("Meeting Prep: {}", prep.query);
+                let mut lines = Vec::new();
+                if let Some(ev) = &prep.target_event {
+                    lines.push(format!(
+                        "Termin: {} ({})",
+                        ev.title,
+                        ev.start_at.as_deref().unwrap_or("?")
+                    ));
+                }
+                if !prep.related_contacts.is_empty() {
+                    lines.push("\nKontakte:".to_string());
+                    for c in &prep.related_contacts {
+                        lines.push(format!("• {} ({})", c.name, c.emails.join(", ")));
+                    }
+                }
+                if !prep.related_mails.is_empty() {
+                    lines.push("\nLetzte E-Mails:".to_string());
+                    for m in &prep.related_mails {
+                        lines.push(format!("• {} — {}", m.subject, m.sender));
+                    }
+                }
+                if !prep.related_notes.is_empty() {
+                    lines.push("\nVerwandte Notizen:".to_string());
+                    for n in &prep.related_notes {
+                        lines.push(format!("• [{}] {}", n.folder_path, n.title));
+                    }
+                }
+                let store = PlanStore::default_store();
+                let proposal = PlanProposal {
+                    schema_version: "1.0".to_string(),
+                    summary: Some(format!("Meeting-Prep-Notiz '{}' anlegen", title)),
+                    operations: vec![PlanOperation::NotesCreate {
+                        account: None,
+                        folder: folder.clone(),
+                        title,
+                        body: lines.join("\n"),
+                    }],
+                };
+                let plan = store.create(profile_name, profile, proposal, 900)?;
+                match cli.format {
+                    OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
+                    _ => emit_json(cli.format, &plan)?,
+                }
+            } else {
+                match cli.format {
+                    OutputFormat::Pretty => ui::render_meeting_prep(&prep, cli.color.into()),
+                    _ => emit_json(cli.format, &prep)?,
+                }
+            }
+            Ok(())
+        }
+        ContextAction::WeeklyReview => {
+            let rev = build_weekly_review(profile_name, profile, cfg.script_timeout_secs);
+            match cli.format {
+                OutputFormat::Pretty => ui::render_weekly_review(&rev, cli.color.into()),
+                _ => emit_json(cli.format, &rev)?,
+            }
+            Ok(())
+        }
+    }
+}
+
+fn handle_report(cli: &Cli, action: &ReportAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+
+    let (output, typst_src, md_src) = match action {
+        ReportAction::Person { query, output } => {
+            let ctx = build_person_context(profile_name, profile, cfg.script_timeout_secs, query, 15);
+            (
+                output,
+                person_context_to_typst(&ctx),
+                Some(person_context_to_markdown(&ctx)),
+            )
+        }
+        ReportAction::DailyBrief { output } => {
+            let brief = build_daily_brief(profile_name, profile, cfg.script_timeout_secs, 15, 15);
+            (output, daily_brief_to_typst(&brief), None)
+        }
+        ReportAction::WeeklyReview { output } => {
+            let rev = build_weekly_review(profile_name, profile, cfg.script_timeout_secs);
+            (output, weekly_review_to_typst(&rev), None)
+        }
+    };
+
+    if let Some(parent) = output.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+
+    let ext = output
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if ext == "md" {
+        let content = md_src.unwrap_or(typst_src);
+        fs::write(output, content)?;
+    } else if ext == "pdf" {
+        let typ_path = output.with_extension("typ");
+        fs::write(&typ_path, &typst_src)?;
+        let status = Command::new("typst")
+            .arg("compile")
+            .arg(&typ_path)
+            .arg(output)
+            .status()
+            .map_err(|e| {
+                MacflyError::ScriptError(format!(
+                    "Typst-Quelltext wurde unter {} gespeichert, aber `typst compile` konnte nicht ausgeführt werden ({e}). Nutze `.typ` für renderreport/typst.",
+                    typ_path.display()
+                ))
+            })?;
+        if !status.success() {
+            return Err(MacflyError::ScriptError(format!(
+                "`typst compile` fehlgeschlagen (Status {status})"
+            )));
+        }
+    } else {
+        fs::write(output, typst_src)?;
+    }
+
+    match cli.format {
+        OutputFormat::Pretty => println!("Dossier/Report geschrieben nach: {}", output.display()),
+        _ => emit_json(
+            cli.format,
+            &serde_json::json!({ "ok": true, "output": output.display().to_string() }),
+        )?,
+    }
+    Ok(())
+}
+
+fn handle_skill(cli: &Cli, action: &SkillAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, _) = cfg.profile(cli.profile.as_deref())?;
+    match action {
+        SkillAction::Show => {
+            print!("{}", render_agent_skill_markdown(profile_name));
+            Ok(())
+        }
+        SkillAction::Export { output } => {
+            let written = export_skill_file(output, profile_name)?;
+            match cli.format {
+                OutputFormat::Pretty => println!("Agent-Skill exportiert nach: {}", written.display()),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({ "ok": true, "path": written.display().to_string() }),
+                )?,
+            }
+            Ok(())
+        }
+    }
+}
+
+fn handle_schedule(cli: &Cli, action: &ScheduleAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, _) = cfg.profile(cli.profile.as_deref())?;
+
+    match action {
+        ScheduleAction::List => {
+            let jobs = list_installed_jobs()?;
+            match cli.format {
+                OutputFormat::Pretty => {
+                    if jobs.is_empty() {
+                        println!("Keine MacFly LaunchAgents installiert.");
+                    } else {
+                        println!("Installierte MacFly LaunchAgents ({}):", jobs.len());
+                        for j in &jobs {
+                            println!("  • {} ({}) → {}", j.name, j.label, j.plist_path);
+                        }
+                    }
+                }
+                _ => emit_json(cli.format, &jobs)?,
+            }
+            Ok(())
+        }
+        ScheduleAction::Install {
+            name,
+            task,
+            hour,
+            minute,
+            dry_run,
+        } => {
+            if *hour > 23 || *minute > 59 {
+                return Err(MacflyError::PlanError(
+                    "Ungültige Uhrzeit (hour 0..23, minute 0..59)".to_string(),
+                ));
+            }
+            let label = job_label(name);
+            let bin_path = std::env::current_exe()
+                .unwrap_or_else(|_| PathBuf::from("macfly"))
+                .display()
+                .to_string();
+            let args: Vec<String> = match task {
+                ScheduleTask::DailyBrief => vec![
+                    "--profile".to_string(),
+                    profile_name.to_string(),
+                    "--format".to_string(),
+                    "json".to_string(),
+                    "context".to_string(),
+                    "daily-brief".to_string(),
+                ],
+                ScheduleTask::WeeklyReview => vec![
+                    "--profile".to_string(),
+                    profile_name.to_string(),
+                    "--format".to_string(),
+                    "json".to_string(),
+                    "context".to_string(),
+                    "weekly-review".to_string(),
+                ],
+                ScheduleTask::NotesAudit => vec![
+                    "--profile".to_string(),
+                    profile_name.to_string(),
+                    "--format".to_string(),
+                    "json".to_string(),
+                    "notes".to_string(),
+                    "audit".to_string(),
+                ],
+            };
+            let log_dir = data_dir().join("logs");
+            fs::create_dir_all(&log_dir)?;
+            let xml = render_launchd_plist(
+                &label,
+                &bin_path,
+                &args,
+                *hour,
+                *minute,
+                &log_dir.display().to_string(),
+            );
+
+            if *dry_run {
+                print!("{xml}");
+                return Ok(());
+            }
+
+            let agents_dir = launch_agents_dir()?;
+            fs::create_dir_all(&agents_dir)?;
+            let plist_path = agents_dir.join(format!("{label}.plist"));
+            fs::write(&plist_path, xml)?;
+            let _ = Command::new("launchctl")
+                .arg("unload")
+                .arg(&plist_path)
+                .output();
+            let _ = Command::new("launchctl")
+                .arg("load")
+                .arg(&plist_path)
+                .output();
+
+            match cli.format {
+                OutputFormat::Pretty => println!(
+                    "LaunchAgent '{}' installiert ({:02}:{:02} Uhr): {}",
+                    label,
+                    hour,
+                    minute,
+                    plist_path.display()
+                ),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "label": label,
+                        "plist_path": plist_path.display().to_string(),
+                    }),
+                )?,
+            }
+            Ok(())
+        }
+        ScheduleAction::Remove { name } => {
+            let label = job_label(name);
+            let plist_path = launch_agents_dir()?.join(format!("{label}.plist"));
+            if !plist_path.exists() {
+                return Err(MacflyError::NotFound(format!(
+                    "LaunchAgent '{}' nicht gefunden",
+                    plist_path.display()
+                )));
+            }
+            let _ = Command::new("launchctl")
+                .arg("unload")
+                .arg(&plist_path)
+                .output();
+            fs::remove_file(&plist_path)?;
+            match cli.format {
+                OutputFormat::Pretty => println!("LaunchAgent '{}' entfernt.", label),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({ "ok": true, "removed": label }),
+                )?,
             }
             Ok(())
         }

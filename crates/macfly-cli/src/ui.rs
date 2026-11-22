@@ -3,8 +3,8 @@ use std::io;
 use macfly_adapters::executor::ApplyReport;
 use macfly_core::error::MacflyError;
 use macfly_core::model::{
-    ContactsAuditReport, DailyBrief, MailOverview, NotesAuditReport, NotesOverview,
-    ShortcutsListResult,
+    ContactsAuditReport, DailyBrief, MailOverview, MeetingPrepContext, NotesAuditReport,
+    NotesOverview, PersonContext, ShortcutsListResult, WeeklyReviewContext,
 };
 use macfly_core::plan::{PlanStatus, RiskLevel, StoredPlan};
 use runemark::{
@@ -591,6 +591,239 @@ pub fn render_contacts_audit(rep: &ContactsAuditReport, detailed: bool, color: C
             .with_total_count(rep.empty_contacts.len());
         for c in &rep.empty_contacts {
             g = g.add_finding(Finding::new(Tone::Info, format!("{} [id: {}]", c.name, c.id)));
+        }
+        report = report.add_group(g);
+    }
+
+    print!("{}", report.render(console));
+}
+
+pub fn render_person_context(ctx: &PersonContext, color: ColorMode) {
+    let console = Console::stdout(color);
+    let verdict = if ctx.warnings.is_empty() {
+        Verdict::Info
+    } else {
+        Verdict::Warning
+    };
+    let mut report = Report::new(format!("MacFly 360° Dossier: {}", ctx.query), verdict)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Profile", &ctx.profile))
+        .add_metric(Metric::new("Contacts", ctx.contacts.len().to_string()))
+        .add_metric(Metric::new("Mails", ctx.recent_mails.len().to_string()))
+        .add_metric(Metric::new("Notes", ctx.matching_notes.len().to_string()))
+        .add_metric(Metric::new("Events", ctx.upcoming_events.len().to_string()))
+        .add_metric(Metric::new("Reminders", ctx.open_reminders.len().to_string()));
+
+    if !ctx.contacts.is_empty() {
+        let mut g = FindingGroup::new("Contacts").with_total_count(ctx.contacts.len());
+        for c in &ctx.contacts {
+            let org = c
+                .organization
+                .as_deref()
+                .map(|o| format!(" ({o})"))
+                .unwrap_or_default();
+            g = g.add_finding(Finding::new(
+                Tone::Success,
+                format!(
+                    "{}{} · {} · {}",
+                    c.name,
+                    org,
+                    c.emails.join(", "),
+                    c.phones.join(", ")
+                ),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !ctx.recent_mails.is_empty() {
+        let mut g = FindingGroup::new("Recent emails").with_total_count(ctx.recent_mails.len());
+        for m in &ctx.recent_mails {
+            let date = m
+                .date_received
+                .as_deref()
+                .and_then(|s| s.get(..10))
+                .unwrap_or("—");
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("{date} [{}] {} — {}", m.account, m.subject, m.sender),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !ctx.matching_notes.is_empty() {
+        let mut g =
+            FindingGroup::new("Matching Apple Notes").with_total_count(ctx.matching_notes.len());
+        for n in &ctx.matching_notes {
+            let date = n
+                .modified_at
+                .as_deref()
+                .and_then(|s| s.get(..10))
+                .unwrap_or("—");
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("{date} [{}] {}", n.folder_path, n.title),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !ctx.upcoming_events.is_empty() || !ctx.open_reminders.is_empty() {
+        let mut g = FindingGroup::new("Events & reminders");
+        for ev in &ctx.upcoming_events {
+            let start = ev
+                .start_at
+                .as_deref()
+                .and_then(|s| s.get(..16))
+                .unwrap_or("?");
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("Event: {start} [{}] {}", ev.calendar, ev.title),
+            ));
+        }
+        for r in &ctx.open_reminders {
+            g = g.add_finding(Finding::new(
+                Tone::Warning,
+                format!("Reminder: [{}] {}", r.list, r.title),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    print!("{}", report.render(console));
+}
+
+pub fn render_meeting_prep(ctx: &MeetingPrepContext, color: ColorMode) {
+    let console = Console::stdout(color);
+    let mut report = Report::new(format!("Meeting Prep: {}", ctx.query), Verdict::Info)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Profile", &ctx.profile))
+        .add_metric(Metric::new(
+            "Related contacts",
+            ctx.related_contacts.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Related mails",
+            ctx.related_mails.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Related notes",
+            ctx.related_notes.len().to_string(),
+        ));
+
+    if let Some(ev) = &ctx.target_event {
+        let start = ev
+            .start_at
+            .as_deref()
+            .and_then(|s| s.get(..16))
+            .unwrap_or("?");
+        let g = FindingGroup::new("Target calendar event").add_finding(Finding::new(
+            Tone::Success,
+            format!("{start} [{}] {}", ev.calendar, ev.title),
+        ));
+        report = report.add_group(g);
+    }
+
+    if !ctx.related_mails.is_empty() {
+        let mut g = FindingGroup::new("Related emails").with_total_count(ctx.related_mails.len());
+        for m in &ctx.related_mails {
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("[{}] {} — {}", m.account, m.subject, m.sender),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !ctx.related_notes.is_empty() {
+        let mut g = FindingGroup::new("Related notes").with_total_count(ctx.related_notes.len());
+        for n in &ctx.related_notes {
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("[{}] {}", n.folder_path, n.title),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    print!("{}", report.render(console));
+}
+
+pub fn render_weekly_review(rev: &WeeklyReviewContext, color: ColorMode) {
+    let console = Console::stdout(color);
+    let verdict = if rev.overdue_reminders.is_empty() {
+        Verdict::Info
+    } else {
+        Verdict::Warning
+    };
+    let mut report = Report::new(format!("MacFly Weekly Review ({})", rev.profile), verdict)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Recent notes", rev.recent_notes.len().to_string()))
+        .add_metric(Metric::new("Unread mails", rev.unread_mails.len().to_string()))
+        .add_metric(
+            Metric::new("Overdue reminders", rev.overdue_reminders.len().to_string()).with_tone(
+                if rev.overdue_reminders.is_empty() {
+                    Tone::Success
+                } else {
+                    Tone::Warning
+                },
+            ),
+        )
+        .add_metric(Metric::new(
+            "Events (7d)",
+            rev.upcoming_events.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Safari tabs",
+            rev.open_safari_tabs.len().to_string(),
+        ));
+
+    if !rev.overdue_reminders.is_empty() {
+        let mut g =
+            FindingGroup::new("Overdue reminders").with_total_count(rev.overdue_reminders.len());
+        for r in &rev.overdue_reminders {
+            g = g.add_finding(Finding::new(
+                Tone::Warning,
+                format!("[{}] {}", r.list, r.title),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !rev.unread_mails.is_empty() {
+        let mut g = FindingGroup::new("Unread emails").with_total_count(rev.unread_mails.len());
+        for m in rev.unread_mails.iter().take(10) {
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("[{}] {} — {}", m.account, m.subject, m.sender),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !rev.recent_notes.is_empty() {
+        let mut g =
+            FindingGroup::new("Recently modified notes").with_total_count(rev.recent_notes.len());
+        for n in rev.recent_notes.iter().take(10) {
+            let date = n
+                .modified_at
+                .as_deref()
+                .and_then(|s| s.get(..10))
+                .unwrap_or("—");
+            g = g.add_finding(Finding::new(
+                Tone::Muted,
+                format!("{date} [{}] {}", n.folder_path, n.title),
+            ));
+        }
+        report = report.add_group(g);
+    }
+
+    if !rev.open_safari_tabs.is_empty() {
+        let mut g =
+            FindingGroup::new("Open Safari tabs").with_total_count(rev.open_safari_tabs.len());
+        for t in rev.open_safari_tabs.iter().take(10) {
+            g = g.add_finding(Finding::new(Tone::Muted, format!("{} — {}", t.title, t.url)));
         }
         report = report.add_group(g);
     }
