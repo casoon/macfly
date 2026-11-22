@@ -16,6 +16,10 @@ use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::Config;
 use macfly_core::error::MacflyError;
+use macfly_core::import::{
+    is_supported_note_file, is_supported_reminder_file, parse_notes_from_str,
+    parse_reminders_from_str,
+};
 use macfly_core::journal::AuditJournal;
 use macfly_core::model::DailyBrief;
 use macfly_core::plan::{PlanOperation, PlanProposal, PlanStore, now_unix};
@@ -199,7 +203,7 @@ enum NotesAction {
         #[arg(long)]
         no_redact: bool,
     },
-    /// Importiert eine Markdown-/Text-Datei (oder ein Verzeichnis) als geprüften Änderungsplan nach Apple Notes
+    /// Importiert Dateien (.md, .txt, .html, .json, .jsonl, .csv) oder ein Verzeichnis als geprüften Änderungsplan nach Apple Notes
     Import {
         #[arg(long)]
         input: PathBuf,
@@ -207,6 +211,9 @@ enum NotesAction {
         folder: String,
         #[arg(long)]
         account: Option<String>,
+        /// Unterordner rekursiv durchsuchen
+        #[arg(long)]
+        recursive: bool,
     },
 }
 
@@ -308,7 +315,7 @@ enum RemindersAction {
         #[arg(long)]
         overdue: bool,
     },
-    /// Importiert Markdown-Checklisten (`- [ ] Aufgabe`) als geprüften Änderungsplan nach Apple Reminders
+    /// Importiert Aufgaben (.md, .txt, .json, .jsonl, .csv) als geprüften Änderungsplan nach Apple Reminders
     Import {
         #[arg(long)]
         input: PathBuf,
@@ -761,31 +768,35 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
             input,
             folder,
             account,
+            recursive,
         } => {
-            let files = collect_import_files(input)?;
+            let files = collect_import_files(input, *recursive, is_supported_note_file)?;
             if files.is_empty() {
                 return Err(MacflyError::PlanError(format!(
-                    "Keine .md oder .txt Dateien gefunden unter {}",
+                    "Keine unterstützten Dateien (.md, .txt, .html, .json, .jsonl, .csv) gefunden unter {}",
                     input.display()
                 )));
             }
             let mut operations = Vec::new();
             for path in &files {
                 let raw = fs::read_to_string(path)?;
-                let (title, body) = parse_markdown_note(path, &raw);
-                operations.push(PlanOperation::NotesCreate {
-                    account: account.clone(),
-                    folder: folder.clone(),
-                    title,
-                    body,
-                });
+                let notes = parse_notes_from_str(path, &raw)?;
+                for note in notes {
+                    operations.push(PlanOperation::NotesCreate {
+                        account: account.clone(),
+                        folder: note.folder_override.unwrap_or_else(|| folder.clone()),
+                        title: note.title,
+                        body: note.body,
+                    });
+                }
             }
             let store = PlanStore::default_store();
             let proposal = PlanProposal {
                 schema_version: "1.0".to_string(),
                 summary: Some(format!(
-                    "Notes-Import: {} Datei(en) nach '{}'",
+                    "Notes-Import: {} Notiz(en) aus {} Datei(en) nach '{}'",
                     operations.len(),
+                    files.len(),
                     folder
                 )),
                 operations,
@@ -1255,27 +1266,28 @@ fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyErr
             Ok(())
         }
         RemindersAction::Import { input, list } => {
-            let raw = fs::read_to_string(input)?;
+            let files = collect_import_files(input, false, is_supported_reminder_file)?;
+            if files.is_empty() {
+                return Err(MacflyError::PlanError(format!(
+                    "Keine unterstützten Dateien (.md, .txt, .json, .jsonl, .csv) gefunden unter {}",
+                    input.display()
+                )));
+            }
             let mut operations = Vec::new();
-            for line in raw.lines() {
-                let trimmed = line.trim();
-                let item = trimmed
-                    .strip_prefix("- [ ] ")
-                    .or_else(|| trimmed.strip_prefix("* [ ] "));
-                if let Some(task_text) = item {
-                    let clean_title = task_text.trim();
-                    if !clean_title.is_empty() {
-                        operations.push(PlanOperation::RemindersCreate {
-                            list: list.clone(),
-                            title: clean_title.to_string(),
-                            notes: None,
-                        });
-                    }
+            for path in &files {
+                let raw = fs::read_to_string(path)?;
+                let items = parse_reminders_from_str(path, &raw)?;
+                for item in items {
+                    operations.push(PlanOperation::RemindersCreate {
+                        list: item.list_override.or_else(|| list.clone()),
+                        title: item.title,
+                        notes: item.notes,
+                    });
                 }
             }
             if operations.is_empty() {
                 return Err(MacflyError::PlanError(format!(
-                    "Keine offenen Markdown-Tasks (`- [ ] ...`) gefunden in {}",
+                    "Keine importierbaren Aufgaben gefunden in {}",
                     input.display()
                 )));
             }
@@ -1591,9 +1603,13 @@ fn sanitize_filename(input: &str) -> String {
     }
 }
 
-fn collect_import_files(input: &PathBuf) -> Result<Vec<PathBuf>, MacflyError> {
+fn collect_import_files(
+    input: &std::path::Path,
+    recursive: bool,
+    predicate: fn(&std::path::Path) -> bool,
+) -> Result<Vec<PathBuf>, MacflyError> {
     if input.is_file() {
-        return Ok(vec![input.clone()]);
+        return Ok(vec![input.to_path_buf()]);
     }
     if !input.is_dir() {
         return Err(MacflyError::NotFound(format!(
@@ -1602,61 +1618,27 @@ fn collect_import_files(input: &PathBuf) -> Result<Vec<PathBuf>, MacflyError> {
         )));
     }
     let mut out = Vec::new();
-    for entry in fs::read_dir(input)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file()
-            && let Some(ext) = path.extension().and_then(|e| e.to_str())
-            && (ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("txt"))
-        {
-            out.push(path);
-        }
-    }
+    collect_files_rec(input, recursive, predicate, &mut out)?;
     out.sort();
     Ok(out)
 }
 
-fn parse_markdown_note(path: &std::path::Path, raw: &str) -> (String, String) {
-    let fallback_title = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Imported Note")
-        .to_string();
-
-    let mut body = raw.trim().to_string();
-    let mut fm_title: Option<String> = None;
-
-    if let Some(rest) = body.strip_prefix("---\n")
-        && let Some(end_idx) = rest.find("\n---\n")
-    {
-        let fm = &rest[..end_idx];
-        for line in fm.lines() {
-            if let Some(val) = line.strip_prefix("title:") {
-                let t = val.trim().trim_matches('"').trim_matches('\'');
-                if !t.is_empty() {
-                    fm_title = Some(t.to_string());
-                }
-            }
-        }
-        body = rest[end_idx + 5..].trim().to_string();
-    }
-
-    if let Some(t) = fm_title {
-        return (t, body);
-    }
-
-    let mut lines = body.lines();
-    if let Some(first) = lines.next()
-        && let Some(heading) = first.strip_prefix("# ")
-    {
-        let title = heading.trim().to_string();
-        let remaining: String = lines.collect::<Vec<_>>().join("\n").trim().to_string();
-        if !title.is_empty() {
-            return (title, remaining);
+fn collect_files_rec(
+    dir: &std::path::Path,
+    recursive: bool,
+    predicate: fn(&std::path::Path) -> bool,
+    out: &mut Vec<PathBuf>,
+) -> Result<(), MacflyError> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && predicate(&path) {
+            out.push(path);
+        } else if recursive && path.is_dir() {
+            collect_files_rec(&path, true, predicate, out)?;
         }
     }
-
-    (fallback_title, body)
+    Ok(())
 }
 
 fn handle_safari(cli: &Cli, action: &SafariAction) -> Result<(), MacflyError> {
