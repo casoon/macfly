@@ -54,18 +54,8 @@ macfly skill export --output ./.claude/skills/macfly`;
   <Hero
     eyebrow="CASOON open source · Rust + AppleScript/JXA"
     title="Safe, deterministic macOS automation & migration."
-    lead="MacFly puts a read-side data firewall, SHA-256 plan approval, and two-way migration pipelines between AI agents (or local Markdown knowledge bases) and your Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts."
+    lead="MacFly puts a read-side DLP firewall, SHA-256 plan approval, and two-way migration pipelines between AI agents (or Git knowledge bases) and your Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts."
   >
-    <Badges>
-      <Badge>Pure Rust</Badge>
-      <Badge>crates.io</Badge>
-      <Badge>runemark UI</Badge>
-      <Badge>DLP Firewall</Badge>
-      <Badge>Migrations</Badge>
-      <Badge>SHA-256 Plans</Badge>
-      <Badge>MCP stdio</Badge>
-      <Badge>MIT / Apache-2.0</Badge>
-    </Badges>
     <Install
       commands={[
         { label: 'Cargo', command: 'cargo install macfly' },
@@ -73,6 +63,16 @@ macfly skill export --output ./.claude/skills/macfly`;
         { label: 'Export', command: 'macfly notes export --output ./backup' },
       ]}
     />
+    <p>
+      100% local on macOS — works with Ollama/MLX, Claude Code, Codex, and Cursor over stdio MCP
+      without cloud OAuth tokens or unattended writes.
+    </p>
+    <Badges>
+      <Badge>Pure Rust</Badge>
+      <Badge>v{config.version}</Badge>
+      <Badge>MCP stdio</Badge>
+      <Badge>MIT / Apache-2.0</Badge>
+    </Badges>
     <Fragment
       slot="output"
       set:html={castDemo('hero', 'cw-hero', 'macfly · doctor, notes audit & 360° dossier', 'hero-narrow')}
