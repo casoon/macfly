@@ -53,9 +53,9 @@ macfly skill export --output ./.claude/skills/macfly`;
 
 <Base>
   <Hero
-    eyebrow="CASOON open source · Rust + AppleScript/JXA"
-    title="Safe, deterministic macOS automation & migration."
-    lead="MacFly puts a read-side DLP firewall, SHA-256 plan approval, and two-way migration pipelines between AI agents (or Git knowledge bases) and your Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts."
+    eyebrow="CASOON open source · Local-first on macOS"
+    title="Your Mac. Your data. Your approval."
+    lead="Give AI agents access to Apple Notes, Mail, Contacts, Calendar, and Reminders — without giving up control. Review every change in full before it happens, keep sensitive data protected locally, and migrate freely."
   >
     <Install
       commands={[
@@ -65,13 +65,13 @@ macfly skill export --output ./.claude/skills/macfly`;
       ]}
     />
     <p>
-      100% local on macOS — works with Ollama/MLX, Claude Code, Codex, and Cursor over stdio MCP
-      without cloud OAuth tokens or unattended writes.
+      MacFly is not another way for AI to control your Mac — it's a way to stay in control when AI
+      uses your Mac. Works with Ollama/MLX, Claude Code, Codex, and Cursor without cloud OAuth tokens.
     </p>
     <Badges>
-      <Badge>Pure Rust</Badge>
+      <Badge>Local-first</Badge>
       <Badge>v{config.version}</Badge>
-      <Badge>MCP stdio</Badge>
+      <Badge>Pure Rust</Badge>
       <Badge>MIT / Apache-2.0</Badge>
     </Badges>
     <Fragment
@@ -83,9 +83,9 @@ macfly skill export --output ./.claude/skills/macfly`;
   <Facts
     items={[
       { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed CLI & MCP' },
-      { value: '6 formats', label: 'two-way migrations across Markdown, Plaintext, HTML, JSON, JSONL, and RFC-4180 CSV' },
-      { value: 'SHA-256', label: 'canonical plan hash binding with interactive TTY approval and JSONL audit journal' },
-      { value: '0 SDK drift', label: '100% Rust core + stdin-only JXA — no Swift toolchain, no Xcode project, no private DB hacks' },
+      { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
+      { value: '0 blind writes', label: 'full-content diff preview, interactive TTY approval, execution lock, and resumable plans' },
+      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — agents can never self-approve or execute writes' },
     ]}
   />
 
@@ -125,8 +125,8 @@ macfly skill export --output ./.claude/skills/macfly`;
     heading="Why Rust + AppleScript/JXA — for AI agents and migrations alike"
     items={[
       {
-        title: 'Two-way migrations (Apple ⇄ Markdown, CSV, JSON, HTML)',
-        body: 'Export Apple Notes trees, project emails, contacts, reminders, calendar schedules, and open Safari tabs into clean Markdown files with YAML frontmatter. Import notes and tasks from Markdown, HTML, JSON, JSONL, or CSV (Notion, Evernote, Obsidian, Todoist) safely through hashed plans.',
+        title: 'Migrations & local backups (Notes & Reminders two-way)',
+        body: 'Export Apple Notes trees, project emails, contacts, reminders, calendar schedules, and open Safari tabs into clean Markdown files with YAML frontmatter. Import notes and tasks back from Markdown, HTML, JSON, JSONL, or CSV (Notion, Evernote, Obsidian, Todoist) safely through reviewable plans.',
       },
       {
         title: 'Deterministic core, thin macOS edge',

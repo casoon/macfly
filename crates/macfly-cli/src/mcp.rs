@@ -14,6 +14,26 @@ use macfly_core::error::MacflyError;
 use macfly_core::plan::{PlanProposal, PlanStore};
 use serde_json::{Value, json};
 
+const LATEST_PROTOCOL_VERSION: &str = "2026-07-28";
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[
+    "2026-07-28",
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+];
+
+fn negotiate_protocol_version(requested: Option<&str>) -> &'static str {
+    if let Some(req) = requested {
+        for &supported in SUPPORTED_PROTOCOL_VERSIONS {
+            if supported == req {
+                return supported;
+            }
+        }
+    }
+    LATEST_PROTOCOL_VERSION
+}
+
 /// Dünner MCP-Server über `stdio` (JSON-RPC 2.0).
 /// Sicherheitsdesign: Exponiert NUR Read-Tools sowie `plan_create` / `plan_inspect`.
 /// `plan_approve` und `plan_apply` sind absichtlich NICHT über MCP erreichbar,
@@ -56,18 +76,22 @@ pub fn run_mcp_server(
         }
 
         let response = match method {
-            "initialize" => json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": { "tools": {} },
-                    "serverInfo": {
-                        "name": "macfly",
-                        "version": env!("CARGO_PKG_VERSION")
+            "initialize" => {
+                let requested_ver = params.get("protocolVersion").and_then(Value::as_str);
+                let negotiated = negotiate_protocol_version(requested_ver);
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "protocolVersion": negotiated,
+                        "capabilities": { "tools": { "listChanged": false } },
+                        "serverInfo": {
+                            "name": "macfly",
+                            "version": env!("CARGO_PKG_VERSION")
+                        }
                     }
-                }
-            }),
+                })
+            }
             "ping" => json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
             "tools/list" => json!({
                 "jsonrpc": "2.0",
@@ -117,6 +141,26 @@ pub fn run_mcp_server(
 }
 
 fn tool_definitions() -> Value {
+    let mut tools = raw_tool_definitions();
+    if let Some(arr) = tools.as_array_mut() {
+        for tool in arr {
+            let name = tool.get("name").and_then(Value::as_str).unwrap_or("");
+            let is_plan_create = name == "plan_create";
+            let annotations = json!({
+                "readOnlyHint": !is_plan_create,
+                "destructiveHint": false,
+                "idempotentHint": !is_plan_create,
+                "openWorldHint": false
+            });
+            if let Some(obj) = tool.as_object_mut() {
+                obj.insert("annotations".to_string(), annotations);
+            }
+        }
+    }
+    tools
+}
+
+fn raw_tool_definitions() -> Value {
     json!([
         {
             "name": "notes_overview",
@@ -448,5 +492,43 @@ fn dispatch_tool(
         _ => Err(MacflyError::NotFound(format!(
             "Unbekanntes MCP-Tool '{name}'"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcp_protocol_negotiation_supports_latest_and_legacy() {
+        assert_eq!(negotiate_protocol_version(Some("2026-07-28")), "2026-07-28");
+        assert_eq!(negotiate_protocol_version(Some("2025-11-25")), "2025-11-25");
+        assert_eq!(negotiate_protocol_version(Some("2024-11-05")), "2024-11-05");
+        assert_eq!(negotiate_protocol_version(None), LATEST_PROTOCOL_VERSION);
+        assert_eq!(
+            negotiate_protocol_version(Some("2099-01-01")),
+            LATEST_PROTOCOL_VERSION
+        );
+    }
+
+    #[test]
+    fn mcp_tools_have_annotations_and_never_expose_approve_or_apply() {
+        let tools = tool_definitions();
+        let arr = tools.as_array().expect("tools must be an array");
+        assert_eq!(arr.len(), 19);
+        for tool in arr {
+            let name = tool["name"].as_str().unwrap();
+            assert_ne!(name, "plan_approve");
+            assert_ne!(name, "plan_apply");
+            let ann = tool["annotations"]
+                .as_object()
+                .expect("every MCP tool must carry annotations");
+            assert_eq!(ann["destructiveHint"].as_bool(), Some(false));
+            if name == "plan_create" {
+                assert_eq!(ann["readOnlyHint"].as_bool(), Some(false));
+            } else {
+                assert_eq!(ann["readOnlyHint"].as_bool(), Some(true));
+            }
+        }
     }
 }

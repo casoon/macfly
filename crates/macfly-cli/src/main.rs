@@ -424,14 +424,19 @@ enum PlanAction {
     List,
     /// Zeigt Details, Diff-Vorschau und Prüfcode eines Plans
     Inspect { plan_id: String },
-    /// Gibt einen Plan nach Prüfung frei (erfordert interaktives TTY oder --confirm-code)
+    /// Gibt einen Plan nach Prüfung frei (erfordert immer ein interaktives TTY)
     Approve {
         plan_id: String,
         #[arg(long)]
         confirm_code: Option<String>,
     },
     /// Führt einen zuvor freigegebenen Plan aus und protokolliert im Audit-Journal
-    Apply { plan_id: String },
+    Apply {
+        plan_id: String,
+        /// Setzt einen teilweise ausgeführten Plan (partially_applied) ab der ersten offenen Operation fort
+        #[arg(long)]
+        resume: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1169,21 +1174,26 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
             plan_id,
             confirm_code,
         } => {
+            if !io::stdin().is_terminal() {
+                return Err(MacflyError::ApprovalError(
+                    "Plan-Freigabe erfordert immer ein interaktives Terminal (Schutz gegen Self-Approval durch Agenten oder Skripte)."
+                        .to_string(),
+                ));
+            }
             let plan = store.load(plan_id)?;
+            println!("Änderungsplan prüfen: {}", plan.plan_id);
+            println!(
+                "Risiko: {:?} | Reversibilität: {:?} | Hash: {}",
+                plan.risk_level, plan.reversibility, plan.plan_hash
+            );
+            for op in &plan.operations {
+                for line in op.detailed_preview() {
+                    println!("  {line}");
+                }
+            }
             let code = match confirm_code {
                 Some(c) => c.clone(),
                 None => {
-                    if !io::stdin().is_terminal() {
-                        return Err(MacflyError::ApprovalError(
-                            "Freigabe ohne --confirm-code erfordert ein interaktives Terminal (Schutz gegen Self-Approval)."
-                                .to_string(),
-                        ));
-                    }
-                    println!("Änderungsplan prüfen: {}", plan.plan_id);
-                    println!("Risiko: {:?} | Reversibilität: {:?}", plan.risk_level, plan.reversibility);
-                    for line in &plan.preview_lines {
-                        println!("  • {line}");
-                    }
                     print!(
                         "\nZur Freigabe Prüfcode '{}' eingeben: ",
                         plan.approval_code
@@ -1206,7 +1216,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
             }
             Ok(())
         }
-        PlanAction::Apply { plan_id } => {
+        PlanAction::Apply { plan_id, resume } => {
             let journal = AuditJournal::default_journal();
             let report = apply_approved_plan(
                 &store,
@@ -1215,6 +1225,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                 profile_name,
                 profile,
                 cfg.script_timeout_secs,
+                *resume,
             )?;
             match cli.format {
                 OutputFormat::Pretty => ui::render_apply_report(&report, cli.color.into()),

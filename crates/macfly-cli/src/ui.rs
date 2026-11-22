@@ -314,6 +314,7 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
     let verdict = match plan.status {
         PlanStatus::PendingApproval => Verdict::ActionRequired,
         PlanStatus::Approved => Verdict::Info,
+        PlanStatus::PartiallyApplied => Verdict::Warning,
         PlanStatus::Applied => Verdict::Passed,
         PlanStatus::Failed => Verdict::Failed,
     };
@@ -335,9 +336,13 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
         .add_metric(Metric::new("Approval code", &plan.approval_code).with_tone(Tone::Warning))
         .add_metric(Metric::new("Hash", &plan.plan_hash));
 
-    let mut ops = FindingGroup::new("Planned operations").with_total_count(plan.operations.len());
-    for line in &plan.preview_lines {
-        ops = ops.add_finding(Finding::new(Tone::Info, line.clone()));
+    let mut ops = FindingGroup::new("Planned operations (full preview)").with_total_count(plan.operations.len());
+    for op in &plan.operations {
+        let tone = match op.risk_level() {
+            RiskLevel::High => Tone::Warning,
+            _ => Tone::Info,
+        };
+        ops = ops.add_finding(Finding::new(tone, op.detailed_preview().join("\n")));
     }
     report = report.add_group(ops);
 
@@ -354,6 +359,12 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
                     .with_command(format!("macfly plan apply {}", plan.plan_id)),
             );
         }
+        PlanStatus::PartiallyApplied => {
+            report = report.add_next_step(
+                NextStep::new("Resume remaining operations")
+                    .with_command(format!("macfly plan apply {} --resume", plan.plan_id)),
+            );
+        }
         _ => {}
     }
 
@@ -362,13 +373,15 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
 
 pub fn render_apply_report(rep: &ApplyReport, color: ColorMode) {
     let console = Console::stdout(color);
-    let verdict = if rep.status == PlanStatus::Applied {
-        Verdict::Passed
-    } else {
-        Verdict::Failed
+    let verdict = match rep.status {
+        PlanStatus::Applied => Verdict::Passed,
+        PlanStatus::PartiallyApplied => Verdict::Warning,
+        _ => Verdict::Failed,
     };
     let mut report = Report::new(format!("Plan Applied: {}", rep.plan_id), verdict)
-        .with_detail_level(DetailLevel::Detailed);
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Succeeded", format!("{}/{}", rep.succeeded_count, rep.total_ops)))
+        .add_metric(Metric::new("Skipped (resumed)", rep.skipped_count.to_string()));
     let mut group = FindingGroup::new("Results").with_total_count(rep.results.len());
     for line in &rep.results {
         group = group.add_finding(Finding::new(Tone::Success, line.clone()));

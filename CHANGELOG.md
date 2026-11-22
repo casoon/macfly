@@ -3,6 +3,18 @@
 All notable changes to MacFly are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-11-22
+
+### Added
+- **Direct macOS binary installer (`install.sh`)** — install prebuilt Apple Silicon and Intel binaries from GitHub Releases with SHA-256 verification and no Cargo/Rust toolchain required.
+- **Full-content plan preview & diffs** in `macfly plan inspect` and `macfly plan approve`, showing complete Apple Mail draft bodies, line-by-line Apple Notes additions, and explicit high-risk warnings for Apple Shortcuts.
+- **Resumable execution & concurrency lock** — exclusive `.lock` guard against duplicate runs, `partially_applied` status on mid-plan errors, per-operation progress persistence, and `macfly plan apply <id> --resume`.
+- **MCP protocol negotiation & tool annotations** — negotiates up to MCP `2026-07-28` (with backwards compatibility to `2024-11-05`) and annotates all 19 tools with `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`.
+
+### Changed
+- **Strict TTY approval guard:** `macfly plan approve` now requires an interactive terminal even when `--confirm-code` is passed, closing non-interactive self-approval paths.
+- **Shortcut risk classification:** `shortcuts.run` operations are now classified as `high` risk and `irreversible`.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

@@ -9,8 +9,8 @@ export default defineConfig({
     casoonPages({
       name: 'MacFly',
       description:
-        'Safe, deterministic macOS automation CLI, two-way migration toolkit & MCP server in pure Rust — with a read-side DLP firewall and SHA-256 plan approval.',
-      tagline: 'Safe, deterministic macOS automation & migration',
+        'Stay in control when AI uses your Mac — policy-guarded macOS automation, local data redaction, reviewable change plans, and Markdown migrations for Apple Notes, Mail, Contacts, Calendar, and Reminders.',
+      tagline: 'Stay in control when AI uses your Mac',
       repo: 'casoon/macfly',
       license: 'MIT OR Apache-2.0',
       packages: [

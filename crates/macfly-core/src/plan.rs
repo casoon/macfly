@@ -1,4 +1,5 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -120,8 +121,17 @@ pub enum Reversibility {
 pub enum PlanStatus {
     PendingApproval,
     Approved,
+    PartiallyApplied,
     Applied,
     Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationRecord {
+    pub index: usize,
+    pub succeeded: bool,
+    pub message: String,
+    pub executed_at_unix: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +153,19 @@ pub struct StoredPlan {
     pub applied_at_unix: Option<u64>,
     pub operations: Vec<PlanOperation>,
     pub preview_lines: Vec<String>,
+    #[serde(default)]
+    pub completed_ops: Vec<OperationRecord>,
+}
+
+/// Exklusiver Dateilock gegen parallele oder doppelte Ausführung desselben Plans.
+pub struct PlanLock {
+    lock_path: PathBuf,
+}
+
+impl Drop for PlanLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.lock_path);
+    }
 }
 
 impl PlanOperation {
@@ -157,16 +180,114 @@ impl PlanOperation {
             | Self::NotesMove { .. }
             | Self::NotesMoveFolderContents { .. }
             | Self::NotesDeleteEmptyFolder { .. }
-            | Self::MailMove { .. }
-            | Self::ShortcutsRun { .. } => RiskLevel::Medium,
+            | Self::MailMove { .. } => RiskLevel::Medium,
+            // Kurzbefehle können beliebige Nebenwirkungen in macOS/externen Diensten auslösen.
+            Self::ShortcutsRun { .. } => RiskLevel::High,
         }
     }
 
     pub fn reversibility(&self) -> Reversibility {
         match self {
-            Self::NotesAppend { .. } | Self::ShortcutsRun { .. } => Reversibility::BestEffort,
+            Self::ShortcutsRun { .. } => Reversibility::Irreversible,
+            Self::NotesAppend { .. } => Reversibility::BestEffort,
             _ => Reversibility::Reversible,
         }
+    }
+
+    /// Vollständige Inhalts- und Diff-Vorschau für die menschliche Prüfung vor Freigabe.
+    pub fn detailed_preview(&self) -> Vec<String> {
+        let mut lines = vec![format!(
+            "{}  [risk: {:?} | reversibility: {:?}]",
+            self.preview(),
+            self.risk_level(),
+            self.reversibility()
+        )];
+        match self {
+            Self::MailCreateDraft {
+                account,
+                to,
+                cc,
+                subject,
+                body,
+                signature_name,
+                reply_to_local_id,
+            } => {
+                if let Some(acc) = account {
+                    lines.push(format!("    Account:   {acc}"));
+                }
+                lines.push(format!("    To:        {}", to.join(", ")));
+                if !cc.is_empty() {
+                    lines.push(format!("    Cc:        {}", cc.join(", ")));
+                }
+                lines.push(format!("    Subject:   {subject}"));
+                if let Some(sig) = signature_name {
+                    lines.push(format!("    Signature: {sig}"));
+                }
+                if let Some(reply_id) = reply_to_local_id {
+                    lines.push(format!("    Reply-To:  {reply_id}"));
+                }
+                lines.push("    --- Draft body (will NOT be sent automatically) ---".to_string());
+                for body_line in body.lines() {
+                    lines.push(format!("    | {body_line}"));
+                }
+                if body.is_empty() {
+                    lines.push("    | (leer)".to_string());
+                }
+            }
+            Self::NotesCreate {
+                account,
+                folder,
+                title,
+                body,
+            } => {
+                if let Some(acc) = account {
+                    lines.push(format!("    Account: {acc}"));
+                }
+                lines.push(format!("    Folder:  {folder}"));
+                lines.push(format!("    Title:   {title}"));
+                lines.push("    --- New note content ---".to_string());
+                for body_line in body.lines() {
+                    lines.push(format!("    + {body_line}"));
+                }
+            }
+            Self::NotesAppend {
+                note_id,
+                expected_revision,
+                text,
+            } => {
+                lines.push(format!("    Note ID:  {note_id}"));
+                if let Some(rev) = expected_revision {
+                    lines.push(format!("    Revision: {rev}"));
+                }
+                lines.push("    --- Appended text ---".to_string());
+                for tline in text.lines() {
+                    lines.push(format!("    + {tline}"));
+                }
+            }
+            Self::ShortcutsRun { name, input } => {
+                lines.push(format!("    Shortcut: {name}"));
+                if let Some(inp) = input {
+                    lines.push(format!("    Input:    {inp}"));
+                }
+                lines.push(
+                    "    ! HIGH RISK: Shortcuts can trigger arbitrary macOS or external actions and cannot be rolled back."
+                        .to_string(),
+                );
+            }
+            Self::RemindersCreate { list, title, notes } => {
+                if let Some(l) = list {
+                    lines.push(format!("    List:  {l}"));
+                }
+                lines.push(format!("    Title: {title}"));
+                if let Some(n) = notes {
+                    for nline in n.lines() {
+                        lines.push(format!("    + {nline}"));
+                    }
+                }
+            }
+            _ => {}
+        }
+        lines
     }
 
     pub fn preview(&self) -> String {
@@ -488,6 +609,7 @@ impl PlanStore {
             applied_at_unix: None,
             operations: proposal.operations,
             preview_lines,
+            completed_ops: Vec::new(),
         };
 
         self.save(&plan)?;
@@ -560,6 +682,28 @@ impl PlanStore {
         let json = serde_json::to_string_pretty(plan)?;
         write_private_file(&path, &format!("{json}\n"))?;
         Ok(())
+    }
+
+    pub fn acquire_lock(&self, plan_id: &str) -> Result<PlanLock, MacflyError> {
+        ensure_private_dir(&self.plans_dir)?;
+        let plan_path = self.plan_path(plan_id)?;
+        let lock_path = plan_path.with_extension("lock");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    MacflyError::ApprovalError(format!(
+                        "Plan '{plan_id}' wird bereits von einem anderen Prozess ausgeführt (Lock aktiv: {})",
+                        lock_path.display()
+                    ))
+                } else {
+                    MacflyError::Io(e)
+                }
+            })?;
+        let _ = writeln!(file, "pid={} started_at={}", std::process::id(), now_unix());
+        Ok(PlanLock { lock_path })
     }
 
     fn plan_path(&self, plan_id: &str) -> Result<PathBuf, MacflyError> {
@@ -699,6 +843,42 @@ mod tests {
 
         profile.shortcuts.allow.push("Office Focus".to_string());
         let ok = store.create("default", &profile, proposal, 600).unwrap();
-        assert_eq!(ok.risk_level, RiskLevel::Medium);
+        assert_eq!(ok.risk_level, RiskLevel::High);
+        assert_eq!(ok.reversibility, Reversibility::Irreversible);
+    }
+
+    #[test]
+    fn plan_lock_prevents_concurrent_execution() {
+        let store = temp_store("lock");
+        let lock1 = store.acquire_lock("plan-123").unwrap();
+        let err = store.acquire_lock("plan-123").err().unwrap();
+        assert_eq!(err.code(), "APPROVAL_ERROR");
+        drop(lock1);
+        assert!(store.acquire_lock("plan-123").is_ok());
+    }
+
+    #[test]
+    fn detailed_preview_shows_full_mail_draft_body_and_notes_diff() {
+        let draft = PlanOperation::MailCreateDraft {
+            account: Some("Exchange".to_string()),
+            to: vec!["billing@acme.example".to_string()],
+            cc: vec![],
+            subject: "Re: Invoice #42".to_string(),
+            body: "Line one\nLine two".to_string(),
+            signature_name: Some("Corporate".to_string()),
+            reply_to_local_id: None,
+        };
+        let lines = draft.detailed_preview().join("\n");
+        assert!(lines.contains("| Line one"));
+        assert!(lines.contains("| Line two"));
+        assert!(lines.contains("Signature: Corporate"));
+
+        let note = PlanOperation::NotesAppend {
+            note_id: "x-coredata://note/1".to_string(),
+            expected_revision: Some("sha256:abc".to_string()),
+            text: "New bullet".to_string(),
+        };
+        let note_lines = note.detailed_preview().join("\n");
+        assert!(note_lines.contains("+ New bullet"));
     }
 }
