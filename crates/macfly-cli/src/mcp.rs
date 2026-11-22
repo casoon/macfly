@@ -4,6 +4,7 @@ use macfly_adapters::calendar::{CalendarAdapter, RemindersAdapter};
 use macfly_adapters::contacts::ContactsAdapter;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::{Config, ProfileConfig};
 use macfly_core::error::MacflyError;
@@ -224,6 +225,16 @@ fn tool_definitions() -> Value {
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
+            "name": "safari_tabs",
+            "description": "Listet alle aktuell offenen Safari-Tabs (Titel & URL), optional gefiltert nach Suchbegriff.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" }
+                }
+            }
+        },
+        {
             "name": "plan_create",
             "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus — der Nutzer gibt den Plan separat im Terminal frei.",
             "inputSchema": {
@@ -343,6 +354,11 @@ fn dispatch_tool(
         "contacts_audit" => {
             let ct = ContactsAdapter::new(cfg.script_timeout_secs);
             Ok(serde_json::to_value(ct.audit()?)?)
+        }
+        "safari_tabs" => {
+            let sf = SafariAdapter::new(cfg.script_timeout_secs);
+            let query = args.get("query").and_then(Value::as_str);
+            Ok(serde_json::to_value(sf.tabs(query)?)?)
         }
         "plan_create" => {
             let proposal: PlanProposal = serde_json::from_value(args.clone())?;

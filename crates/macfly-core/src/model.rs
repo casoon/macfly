@@ -255,6 +255,23 @@ pub struct ContactsAuditReport {
     pub empty_contacts: Vec<ContactSummary>,
 }
 
+// ---------- Apple Safari ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SafariTab {
+    pub window_index: usize,
+    pub tab_index: usize,
+    pub title: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SafariTabsResult {
+    pub schema_version: String,
+    pub total_tabs: usize,
+    pub tabs: Vec<SafariTab>,
+}
+
 // ---------- Context Packs ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

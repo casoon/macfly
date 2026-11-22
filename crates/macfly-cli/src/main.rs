@@ -12,6 +12,7 @@ use macfly_adapters::contacts::ContactsAdapter;
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::Config;
 use macfly_core::error::MacflyError;
@@ -110,6 +111,11 @@ enum Commands {
     Contacts {
         #[command(subcommand)]
         action: ContactsAction,
+    },
+    /// Apple Safari offene Tabs auslesen, als Markdown exportieren oder nach Apple Notes migrieren
+    Safari {
+        #[command(subcommand)]
+        action: SafariAction,
     },
     /// Transaktionale Änderungspläne (Plan → Inspect → Approve → Apply)
     Plan {
@@ -271,6 +277,15 @@ enum CalendarAction {
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    /// Exportiert kommende Termine als Markdown-Übersicht (inkl. YAML-Frontmatter)
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long, default_value_t = 14)]
+        days: u32,
+        #[arg(long)]
+        calendar: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -283,6 +298,22 @@ enum RemindersAction {
         overdue: bool,
         #[arg(long, default_value_t = 50)]
         limit: usize,
+    },
+    /// Exportiert offene Erinnerungen als Markdown-Checkliste (`- [ ] ...`)
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        list: Option<String>,
+        #[arg(long)]
+        overdue: bool,
+    },
+    /// Importiert Markdown-Checklisten (`- [ ] Aufgabe`) als geprüften Änderungsplan nach Apple Reminders
+    Import {
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        list: Option<String>,
     },
 }
 
@@ -318,6 +349,31 @@ enum ContactsAction {
         query: Option<String>,
         #[arg(long, default_value_t = 0)]
         limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum SafariAction {
+    /// Offene Safari-Tabs (Titel & URL) auflisten
+    Tabs {
+        #[arg(long)]
+        query: Option<String>,
+    },
+    /// Offene Safari-Tabs als Markdown-Linkliste exportieren
+    Export {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        query: Option<String>,
+    },
+    /// Migriert offene Safari-Tabs über einen geprüften Änderungsplan als Sammelnotiz nach Apple Notes
+    ToNote {
+        #[arg(long, default_value = "00 · Eingang")]
+        folder: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        query: Option<String>,
     },
 }
 
@@ -402,6 +458,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Reminders { action } => handle_reminders(cli, action),
         Commands::Shortcuts { action } => handle_shortcuts(cli, action),
         Commands::Contacts { action } => handle_contacts(cli, action),
+        Commands::Safari { action } => handle_safari(cli, action),
         Commands::Plan { action } => handle_plan(cli, action),
         Commands::Context { action } => handle_context(cli, action),
         Commands::History { limit } => handle_history(cli, *limit),
@@ -1077,11 +1134,56 @@ fn handle_calendar(cli: &Cli, action: &CalendarAction) -> Result<(), MacflyError
             }
             Ok(())
         }
+        CalendarAction::Export {
+            output,
+            days,
+            calendar,
+        } => {
+            let res = adapter.events(*days, calendar.as_deref(), 0)?;
+            if let Some(parent) = output.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent)?;
+            }
+            let mut md = format!(
+                "---\ntype: \"calendar.export\"\ndays: {}\ncount: {}\n---\n\n# Calendar Events (next {} days)\n\n",
+                res.days,
+                res.events.len(),
+                res.days
+            );
+            for ev in &res.events {
+                let start = ev.start_at.as_deref().unwrap_or("?");
+                let loc = ev
+                    .location
+                    .as_deref()
+                    .map(|l| format!(" — *{l}*"))
+                    .unwrap_or_default();
+                md.push_str(&format!("- **{}** `[{}]` {}{}\n", start, ev.calendar, ev.title, loc));
+            }
+            fs::write(output, md)?;
+            match cli.format {
+                OutputFormat::Pretty => println!(
+                    "{} Termin(e) als Markdown exportiert nach: {}",
+                    res.events.len(),
+                    output.display()
+                ),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output": output.display().to_string(),
+                        "exported_count": res.events.len(),
+                    }),
+                )?,
+            }
+            Ok(())
+        }
     }
 }
 
 fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyError> {
     let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
     let adapter = RemindersAdapter::new(cfg.script_timeout_secs);
     match action {
         RemindersAction::List {
@@ -1107,6 +1209,90 @@ fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyErr
                     }
                 }
                 _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        RemindersAction::Export {
+            output,
+            list,
+            overdue,
+        } => {
+            let res = adapter.list(list.as_deref(), *overdue, 0)?;
+            if let Some(parent) = output.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent)?;
+            }
+            let mut md = format!(
+                "---\ntype: \"reminders.export\"\ncount: {}\n---\n\n# Open Reminders\n\n",
+                res.reminders.len()
+            );
+            for r in &res.reminders {
+                let due = r
+                    .due_at
+                    .as_deref()
+                    .and_then(|s| s.get(..10))
+                    .map(|d| format!(" *(due: {d})*"))
+                    .unwrap_or_default();
+                md.push_str(&format!("- [ ] `[{}]` {}{}\n", r.list, r.title, due));
+            }
+            fs::write(output, md)?;
+            match cli.format {
+                OutputFormat::Pretty => println!(
+                    "{} Erinnerung(en) als Markdown-Checkliste exportiert nach: {}",
+                    res.reminders.len(),
+                    output.display()
+                ),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output": output.display().to_string(),
+                        "exported_count": res.reminders.len(),
+                    }),
+                )?,
+            }
+            Ok(())
+        }
+        RemindersAction::Import { input, list } => {
+            let raw = fs::read_to_string(input)?;
+            let mut operations = Vec::new();
+            for line in raw.lines() {
+                let trimmed = line.trim();
+                let item = trimmed
+                    .strip_prefix("- [ ] ")
+                    .or_else(|| trimmed.strip_prefix("* [ ] "));
+                if let Some(task_text) = item {
+                    let clean_title = task_text.trim();
+                    if !clean_title.is_empty() {
+                        operations.push(PlanOperation::RemindersCreate {
+                            list: list.clone(),
+                            title: clean_title.to_string(),
+                            notes: None,
+                        });
+                    }
+                }
+            }
+            if operations.is_empty() {
+                return Err(MacflyError::PlanError(format!(
+                    "Keine offenen Markdown-Tasks (`- [ ] ...`) gefunden in {}",
+                    input.display()
+                )));
+            }
+            let store = PlanStore::default_store();
+            let proposal = PlanProposal {
+                schema_version: "1.0".to_string(),
+                summary: Some(format!(
+                    "Reminders-Import: {} Aufgabe(n) aus {}",
+                    operations.len(),
+                    input.display()
+                )),
+                operations,
+            };
+            let plan = store.create(profile_name, profile, proposal, 900)?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
+                _ => emit_json(cli.format, &plan)?,
             }
             Ok(())
         }
@@ -1471,4 +1657,102 @@ fn parse_markdown_note(path: &std::path::Path, raw: &str) -> (String, String) {
     }
 
     (fallback_title, body)
+}
+
+fn handle_safari(cli: &Cli, action: &SafariAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+    let adapter = SafariAdapter::new(cfg.script_timeout_secs);
+
+    match action {
+        SafariAction::Tabs { query } => {
+            let res = adapter.tabs(query.as_deref())?;
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!("Offene Safari-Tabs ({}):", res.total_tabs);
+                    for t in &res.tabs {
+                        println!(
+                            "  [W{}:T{}] {} — {}",
+                            t.window_index, t.tab_index, t.title, t.url
+                        );
+                    }
+                }
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        SafariAction::Export { output, query } => {
+            let res = adapter.tabs(query.as_deref())?;
+            if let Some(parent) = output.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent)?;
+            }
+            let mut md = format!(
+                "---\ntype: \"safari.tabs\"\ncount: {}\n---\n\n# Safari Tabs\n\n",
+                res.total_tabs
+            );
+            for t in &res.tabs {
+                md.push_str(&format!("- [{}]({})\n", t.title, t.url));
+            }
+            fs::write(output, md)?;
+            match cli.format {
+                OutputFormat::Pretty => println!(
+                    "{} Safari-Tab(s) als Markdown exportiert nach: {}",
+                    res.total_tabs,
+                    output.display()
+                ),
+                _ => emit_json(
+                    cli.format,
+                    &serde_json::json!({
+                        "ok": true,
+                        "output": output.display().to_string(),
+                        "exported_count": res.total_tabs,
+                    }),
+                )?,
+            }
+            Ok(())
+        }
+        SafariAction::ToNote {
+            folder,
+            title,
+            query,
+        } => {
+            let res = adapter.tabs(query.as_deref())?;
+            if res.tabs.is_empty() {
+                return Err(MacflyError::PlanError(
+                    "Keine passenden offenen Safari-Tabs gefunden".to_string(),
+                ));
+            }
+            let note_title =
+                title.clone().unwrap_or_else(|| format!("Safari Tabs ({} Links)", res.total_tabs));
+            let body: String = res
+                .tabs
+                .iter()
+                .map(|t| format!("• {} — {}", t.title, t.url))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let store = PlanStore::default_store();
+            let proposal = PlanProposal {
+                schema_version: "1.0".to_string(),
+                summary: Some(format!(
+                    "Safari-Tabs ({}) als Notiz nach '{}' sichern",
+                    res.total_tabs, folder
+                )),
+                operations: vec![PlanOperation::NotesCreate {
+                    account: None,
+                    folder: folder.clone(),
+                    title: note_title,
+                    body,
+                }],
+            };
+            let plan = store.create(profile_name, profile, proposal, 900)?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
+                _ => emit_json(cli.format, &plan)?,
+            }
+            Ok(())
+        }
+    }
 }

@@ -6,6 +6,7 @@ use macfly_core::plan::{
 };
 use serde::Serialize;
 
+use crate::calendar::RemindersAdapter;
 use crate::mail::MailAdapter;
 use crate::notes::NotesAdapter;
 use crate::shortcuts::ShortcutsAdapter;
@@ -50,6 +51,7 @@ pub fn apply_approved_plan(
     let notes = NotesAdapter::new(timeout_secs);
     let mail = MailAdapter::new(timeout_secs);
     let shortcuts = ShortcutsAdapter::new(timeout_secs);
+    let reminders = RemindersAdapter::new(timeout_secs);
     let mut results = Vec::new();
 
     for op in &plan.operations {
@@ -68,6 +70,7 @@ pub fn apply_approved_plan(
             PlanOperation::ShortcutsRun { name, input } => {
                 shortcuts.run(profile_name, profile, name, input.as_deref())
             }
+            PlanOperation::RemindersCreate { .. } => reminders.execute_operation(op),
         };
 
         match outcome {

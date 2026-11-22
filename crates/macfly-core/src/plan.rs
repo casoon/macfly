@@ -90,6 +90,13 @@ pub enum PlanOperation {
         #[serde(default)]
         input: Option<String>,
     },
+    RemindersCreate {
+        #[serde(default)]
+        list: Option<String>,
+        title: String,
+        #[serde(default)]
+        notes: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -144,7 +151,8 @@ impl PlanOperation {
             Self::NotesCreate { .. }
             | Self::NotesCreateFolder { .. }
             | Self::MailCreateDraft { .. }
-            | Self::MailMarkRead { .. } => RiskLevel::Low,
+            | Self::MailMarkRead { .. }
+            | Self::RemindersCreate { .. } => RiskLevel::Low,
             Self::NotesAppend { .. }
             | Self::NotesMove { .. }
             | Self::NotesMoveFolderContents { .. }
@@ -244,6 +252,10 @@ impl PlanOperation {
             Self::ShortcutsRun { name, input } => match input {
                 Some(_) => format!("[shortcuts.run] Kurzbefehl '{name}' (mit Eingabe) ausführen"),
                 None => format!("[shortcuts.run] Kurzbefehl '{name}' ausführen"),
+            },
+            Self::RemindersCreate { list, title, .. } => match list {
+                Some(l) => format!("[reminders.create] Neue Erinnerung '{title}' in Liste '{l}'"),
+                None => format!("[reminders.create] Neue Erinnerung '{title}'"),
             },
         }
     }
@@ -376,6 +388,13 @@ impl PlanOperation {
                     return Err(MacflyError::ScopeDenied(format!(
                         "Kurzbefehl '{name}' ist im Profil '{profile_name}' nicht in `shortcuts.allow` freigegeben"
                     )));
+                }
+            }
+            Self::RemindersCreate { title, .. } => {
+                if title.trim().is_empty() {
+                    return Err(MacflyError::PlanError(
+                        "reminders.create benötigt einen nicht-leeren Titel".to_string(),
+                    ));
                 }
             }
         }

@@ -1,11 +1,19 @@
 use macfly_core::error::MacflyError;
 use macfly_core::model::{CalendarEvent, ReminderItem};
+use macfly_core::plan::PlanOperation;
 use serde::{Deserialize, Serialize};
 
 use crate::jxa::run_jxa;
 
 const SCRIPT_CALENDAR: &str = include_str!("../scripts/calendar_events.js");
 const SCRIPT_REMINDERS: &str = include_str!("../scripts/reminders_list.js");
+const SCRIPT_REMINDERS_MUTATE: &str = include_str!("../scripts/reminders_mutate.js");
+
+#[derive(Debug, Deserialize)]
+struct RawMutateResponse {
+    ok: bool,
+    detail: String,
+}
 
 pub struct CalendarAdapter {
     timeout_secs: u64,
@@ -98,5 +106,31 @@ impl RemindersAdapter {
             returned,
             reminders: raw.reminders,
         })
+    }
+
+    pub fn execute_operation(&self, op: &PlanOperation) -> Result<String, MacflyError> {
+        let payload = match op {
+            PlanOperation::RemindersCreate { list, title, notes } => serde_json::json!({
+                "action": "reminders_create",
+                "list": list,
+                "title": title,
+                "notes": notes,
+            }),
+            _ => {
+                return Err(MacflyError::PlanError(
+                    "Operation gehört nicht zum Reminders-Adapter".to_string(),
+                ));
+            }
+        };
+        let res: RawMutateResponse = run_jxa(
+            "Apple Reminders",
+            SCRIPT_REMINDERS_MUTATE,
+            &payload,
+            self.timeout_secs,
+        )?;
+        if !res.ok {
+            return Err(MacflyError::ScriptError(res.detail));
+        }
+        Ok(res.detail)
     }
 }
