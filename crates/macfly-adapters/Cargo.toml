@@ -13,6 +13,6 @@ readme = "../../README.md"
 description = "Safe stdin-only JXA/AppleScript adapters for macOS apps (Notes, Mail, Calendar, Reminders) in pure Rust"
 
 [dependencies]
-macfly-core = { version = "0.1.0", path = "../macfly-core" }
+macfly-core = { version = "0.2.0", path = "../macfly-core" }
 serde.workspace = true
 serde_json.workspace = true
