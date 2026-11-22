@@ -9,8 +9,8 @@ export default defineConfig({
     casoonPages({
       name: 'MacFly',
       description:
-        'Stay in control when AI uses your Mac — policy-guarded macOS automation, local data redaction, reviewable change plans, and Markdown migrations for Apple Notes, Mail, Contacts, Calendar, and Reminders.',
-      tagline: 'Stay in control when AI uses your Mac',
+        'Let AI work with your Mac. On your terms. A controlled, local AI access layer for Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts.',
+      tagline: 'Let AI work with your Mac. On your terms.',
       repo: 'casoon/macfly',
       license: 'MIT OR Apache-2.0',
       packages: [

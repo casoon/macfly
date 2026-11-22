@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import {
   Badge,
   Badges,
+  Button,
   CallToAction,
   CodeBlock,
   Compare,
@@ -13,6 +14,7 @@ import {
   Install,
   Quickstart,
   ReleaseHighlights,
+  Tabs,
 } from '@casoon/pages-theme/components';
 import Base from '@casoon/pages-theme/layouts/Base.astro';
 import { parseChangelog } from '@casoon/pages-theme/lib/changelog';
@@ -26,137 +28,248 @@ const latestRelease = config.changelog
     )
   : undefined;
 
+const aiPrompts = [
+  {
+    title: 'Organize my Apple Notes',
+    prompt:
+      '“Analyze my 800 notes, find duplicates and single-note folders, and propose a cleaner folder structure. Show me every change before applying it.”',
+    result:
+      'MacFly audits the library, protects notes with tables or attachments via its Fidelity Guard, and builds a reviewable change plan you approve once.',
+  },
+  {
+    title: 'Prepare my daily work',
+    prompt:
+      '“Check today’s meetings, overdue reminders, and relevant emails across my accounts, and prepare a morning briefing.”',
+    result:
+      'MacFly correlates 5 Apple apps locally with automatic secret redaction (IBANs, API keys, OTPs) — without cloud OAuth connectors.',
+  },
+  {
+    title: 'Move my knowledge, safely',
+    prompt:
+      '“Export my project notes as Markdown for my local knowledge base, or import these CSV tasks into Apple Reminders after I review the plan.”',
+    result:
+      'Structured Markdown export across all 7 macOS apps and two-way import for Apple Notes & Reminders (Markdown, HTML, JSON, JSONL, CSV).',
+  },
+];
+
+const mcpClaudeCode = `# Register MacFly as a local stdio MCP server in Claude Code
+claude mcp add macfly -- macfly mcp --profile default
+
+# Optional: export the ready-to-use SKILL.md into your workspace
+macfly skill export --output ./.claude/skills/macfly`;
+
+const mcpClaudeDesktop = `// ~/Library/Application Support/Claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "macfly": {
+      "command": "/Users/<you>/.local/bin/macfly",
+      "args": ["mcp", "--profile", "default"]
+    }
+  }
+}`;
+
+const mcpCursor = `// .cursor/mcp.json (or ~/.cursor/mcp.json)
+{
+  "mcpServers": {
+    "macfly": {
+      "command": "macfly",
+      "args": ["mcp", "--profile", "default"]
+    }
+  }
+}`;
+
+const mcpLocalLlm = `# Zero-cloud pipeline with Ollama / MLX on Apple Silicon:
+macfly context daily-brief --format agent | ollama run qwen2.5:14b \\
+  "Summarize my top 3 priorities today and flag overdue tasks."`;
+
 const quickstartCode = `# 1. Install (no Cargo needed) & verify macOS access
 curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
 # or: cargo install macfly
 macfly doctor
 macfly config init
 
-# 2. Audit & reorganize Notes, Mail, Contacts, Calendar, Reminders & Safari
-macfly notes audit
-macfly contacts audit
-macfly mail overview
-macfly safari tabs
-macfly context daily-brief
+# 2. Connect your AI client (MCP or Agent SKILL.md)
+claude mcp add macfly -- macfly mcp --profile default
+macfly skill export --output ./.claude/skills/macfly
 
-# 3. Migrate & back up (Markdown, CSV, JSON, JSONL, HTML)
-macfly notes export --output ./notes-backup --folder "10 · Work"
-macfly notes import --input ./notion-or-evernote --folder "00 · Inbox" --recursive
-macfly mail export --output ./mail-archive --query "Invoice"
-
-# 4. Cross-app 360° dossiers, Typst reports, SKILL.md & launchd schedules
-macfly context person "Acme"
-macfly context meeting-prep --query "Kickoff" --create-note
-macfly report person "Acme" --output ./dossier-acme.pdf
-macfly skill export --output ./.claude/skills/macfly`;
+# 3. Review & approve any change your AI proposes
+macfly plan list
+macfly plan inspect <plan-id>
+macfly plan approve <plan-id>
+macfly plan apply <plan-id>`;
 ---
 
 <Base>
+  <!-- 1. AI-first Hero -->
   <Hero
-    eyebrow="CASOON open source · Local-first on macOS"
-    title="Your Mac. Your data. Your approval."
-    lead="Give AI agents access to Apple Notes, Mail, Contacts, Calendar, and Reminders — without giving up control. Review every change in full before it happens, keep sensitive data protected locally, and migrate freely."
+    eyebrow="CASOON open source · Controlled AI Access Layer for macOS"
+    title="Let AI work with your Mac. On your terms."
+    lead="Give AI agents controlled access to Apple Notes, Mail, Calendar, Contacts, and more — through a secure, local execution layer. You describe the task. MacFly defines the boundaries, validates changes, and keeps you in control."
   >
     <Install
       commands={[
         { label: 'Installer', command: 'curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash' },
         { label: 'Cargo', command: 'cargo install macfly' },
-        { label: 'Verify', command: 'macfly doctor' },
+        { label: 'Claude MCP', command: 'claude mcp add macfly -- macfly mcp --profile default' },
       ]}
     />
     <p>
-      MacFly is not another way for AI to control your Mac — it's a way to stay in control when AI
-      uses your Mac. Works with Ollama/MLX, Claude Code, Codex, and Cursor without cloud OAuth tokens.
+      <strong>Your AI knows what to do. MacFly controls what it can do.</strong>
+      No AppleScript, no cloud OAuth tokens, and no unattended writes.
     </p>
     <Badges>
+      <Badge>AI-first</Badge>
       <Badge>Local-first</Badge>
-      <Badge>v{config.version}</Badge>
-      <Badge>Pure Rust</Badge>
-      <Badge>MIT / Apache-2.0</Badge>
+      <Badge>Human-approved writes</Badge>
+      <Badge>Open Source · v{config.version}</Badge>
     </Badges>
     <Fragment
       slot="output"
-      set:html={castDemo('hero', 'cw-hero', 'macfly · doctor, notes audit & 360° dossier', 'hero-narrow')}
+      set:html={castDemo('hero', 'cw-hero', 'macfly · controlled access across your Apple apps', 'hero-narrow')}
     />
   </Hero>
 
-  <Facts
-    items={[
-      { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed CLI & MCP' },
-      { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
-      { value: '0 blind writes', label: 'full-content diff preview, interactive TTY approval, execution lock, and resumable plans' },
-      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — agents can never self-approve or execute writes' },
+  <!-- 2. Natural-language AI Use Cases -->
+  <section class="prompts" aria-labelledby="prompts-heading">
+    <p class="eyebrow">The AI is the interface</p>
+    <h2 id="prompts-heading">Just tell your AI what you need</h2>
+    <p class="section-lead">
+      You do not need to memorize CLI flags or AppleScript. Describe your goal in plain language —
+      your AI agent talks to MacFly, and MacFly enforces your rules before touching any app.
+    </p>
+    <div class="prompt-grid">
+      {
+        aiPrompts.map((item) => (
+          <article class="prompt-card">
+            <h3>{item.title}</h3>
+            <blockquote>{item.prompt}</blockquote>
+            <p>{item.result}</p>
+          </article>
+        ))
+      }
+    </div>
+    <div class="prompt-links">
+      <Button href={url('demo/')} variant="secondary">
+        Explore all 5 workflows, prompts &amp; configs
+      </Button>
+      <Button href={url('docs/guide/mcp-and-agents/')} variant="quiet">
+        MCP &amp; AI agent guide →
+      </Button>
+    </div>
+  </section>
+
+  <!-- 3. Controlled AI Access Layer -->
+  <Flow
+    eyebrow="Controlled AI Access Layer"
+    title="Your AI knows what to do. MacFly controls what it can do."
+    lead="MacFly does not automate your Mac for you — it makes your Mac safely usable by AI agents inside a strict, auditable corridor."
+    stages={[
+      {
+        label: '1 · Intent',
+        artifact: 'Natural language',
+        title: 'You describe the goal',
+        body: '“Organize my notes”, “Prepare my 10am meeting”, or “Draft replies to open invoices.”',
+      },
+      {
+        label: '2 · Plan',
+        artifact: '19 MCP tools / CLI',
+        title: 'Your AI proposes steps',
+        body: 'Claude, Codex, Cursor, or Ollama reads DLP-filtered context and submits a typed change plan.',
+      },
+      {
+        label: '3 · Control',
+        artifact: 'Diff + TTY approval',
+        title: 'MacFly checks & asks you',
+        body: 'Policy denylists, full-content draft/note diffs, risk levels, and mandatory interactive TTY approval.',
+      },
+      {
+        label: '4 · Execute',
+        artifact: 'Lock + journal.jsonl',
+        title: 'Deterministic apply',
+        body: 'Executed safely across Notes, Mail, Contacts, Calendar, Reminders, Safari & Shortcuts — resumable and logged.',
+      },
     ]}
   />
 
-  <Flow
-    eyebrow="Safety & migration lifecycle"
-    title="No blind writes — every change and import goes through four steps"
-    lead="Whether triggered by a multi-format migration, a local LLM, an MCP client, or a shell script, mutations are validated, hashed, reviewed, and journaled."
-    stages={[
-      {
-        label: 'Step 1',
-        artifact: 'plan.json / import',
-        title: 'Propose or import',
-        body: 'An agent proposes operations over MCP, or `notes/reminders import` parses `.md`, `.csv`, `.json`, `.html` files.',
-      },
-      {
-        label: 'Step 2',
-        artifact: 'sha256 + 0600',
-        title: 'Validate & hash',
-        body: 'Rust checks scopes, allowlists, and revisions, then locks the plan with a SHA-256 hash and TTL.',
-      },
-      {
-        label: 'Step 3',
-        artifact: 'TTY + 6-char code',
-        title: 'Approve',
-        body: 'You review the `runemark` plan report in an interactive terminal and confirm the hash code.',
-      },
-      {
-        label: 'Step 4',
-        artifact: 'journal.jsonl',
-        title: 'Apply & audit',
-        body: 'MacFly verifies integrity pre-flight, executes losslessly, and appends every result to the audit log.',
-      },
+  <!-- 4. Works with your AI -->
+  <section class="ai-setup" aria-labelledby="ai-setup-heading">
+    <p class="eyebrow">Works with your AI</p>
+    <h2 id="ai-setup-heading">Connect Claude, Cursor, Codex, or local models in seconds</h2>
+    <p class="section-lead">
+      MacFly is model-independent and speaks both modern MCP (up to spec <code>2026-07-28</code>
+      with tool annotations) and compact agent-ready CLI JSON. Keep private data 100% local on
+      Apple Silicon with Ollama/MLX, or use the built-in DLP firewall with cloud models.
+    </p>
+    <Tabs
+      label="Connect your AI client"
+      tabs={[
+        { id: 'claude-code', label: 'Claude Code' },
+        { id: 'claude-desktop', label: 'Claude Desktop' },
+        { id: 'cursor', label: 'Cursor' },
+        { id: 'ollama', label: 'Local Ollama / MLX' },
+      ]}
+    >
+      <div slot="claude-code">
+        <CodeBlock code={mcpClaudeCode} lang="sh" title="Claude Code (MCP + SKILL.md)" />
+      </div>
+      <div slot="claude-desktop">
+        <CodeBlock code={mcpClaudeDesktop} lang="json" title="claude_desktop_config.json" />
+      </div>
+      <div slot="cursor">
+        <CodeBlock code={mcpCursor} lang="json" title=".cursor/mcp.json" />
+      </div>
+      <div slot="ollama">
+        <CodeBlock code={mcpLocalLlm} lang="sh" title="100% local Apple Silicon pipeline" />
+      </div>
+    </Tabs>
+  </section>
+
+  <!-- 5. Technical Architecture & Comparison -->
+  <Facts
+    items={[
+      { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
+      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — agents can never self-approve or apply writes' },
+      { value: '0 blind writes', label: 'full-content diff preview, strict TTY approval, execution lock, and resumable plans' },
+      { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}
   />
 
   <Features
-    heading="Why Rust + AppleScript/JXA — for AI agents and migrations alike"
+    heading="Technical architecture under the hood"
     items={[
       {
+        title: 'Strict separation of proposal and execution',
+        body: 'MCP exposes read tools, cross-app context packs, and `plan_create` — never `plan_approve` or `plan_apply`. Even under indirect prompt injection, an agent cannot self-approve changes.',
+      },
+      {
+        title: 'Read-side Data Firewall (DLP) & profile denylists',
+        body: 'Exclude sensitive folders (`Passwords`, `Health`) and mailboxes by policy, redact IBANs, API keys, private keys, credit cards, and OTPs in Rust, and tag external emails as `untrusted_external`.',
+      },
+      {
+        title: 'Full-content diff previews, locks & resume',
+        body: 'Inspect complete email draft bodies, line-by-line note additions, and high-risk Shortcut warnings before approving. Exclusive `.lock` files prevent duplicate runs; `partially_applied` plans resume cleanly with `--resume`.',
+      },
+      {
         title: 'Migrations & local backups (Notes & Reminders two-way)',
-        body: 'Export Apple Notes trees, project emails, contacts, reminders, calendar schedules, and open Safari tabs into clean Markdown files with YAML frontmatter. Import notes and tasks back from Markdown, HTML, JSON, JSONL, or CSV (Notion, Evernote, Obsidian, Todoist) safely through reviewable plans.',
+        body: 'Export Apple Notes trees, emails, contacts, calendar schedules, reminders, and Safari tabs into clean Markdown with YAML frontmatter. Import Notes & Reminders from Markdown, HTML, JSON, JSONL, or CSV via reviewable plans.',
       },
       {
-        title: 'Deterministic core, thin macOS edge',
-        body: 'Policy evaluation, DLP redaction, HTML normalization, multi-format import parsers, note fidelity checks, SHA-256 plan hashing, and the audit journal live in pure, memory-safe Rust — tested offline in milliseconds with `cargo test` and immune to yearly macOS SDK drift.',
+        title: 'Pure Rust core, static stdin-only JXA edge',
+        body: 'Policy checks, DLP, HTML normalization, Note Fidelity Guard, SHA-256 plan hashing, and JSONL audit logs live in memory-safe Rust — zero Xcode drift, zero `argv` secret leakage, and direct Apple Mail signature lookup.',
       },
       {
-        title: 'Read-side Data Firewall (DLP) & Local AI ready',
-        body: 'Pair MacFly with local LLMs (Ollama, LM Studio, MLX) so private data never leaves your Mac. When using cloud models, profile denylists, automatic regex redaction (IBAN, API keys, OTPs), and untrusted_external mail framing protect every read.',
-      },
-      {
-        title: 'Fidelity guard & cleanup audits',
-        body: '`notes audit` and `contacts audit` uncover empty folders, single-note folders, duplicate titles, and duplicate contacts. When reorganizing Apple Notes, MacFly protects attachments, tables, checklists, and applenotes:// links from destructive edits.',
-      },
-      {
-        title: 'Single Point of Truth for Mail, Safari & Shortcuts',
-        body: 'No duplicate IMAP passwords and no second copy of your email footer — signatures are pulled straight from Apple Mail. Capture open Safari research tabs directly into Apple Notes, and trigger allowlisted Shortcuts for Focus modes or HomeKit scenes.',
-      },
-      {
-        title: 'Consistent terminal UX powered by runemark',
-        body: 'Human-readable output uses `runemark` for semantic verdicts, grouped findings, actionable error blocks, and NO_COLOR compliance — while `--format json`, `--format agent`, and `macfly mcp` deliver pure machine-readable JSON.',
+        title: '360° dossiers, direct PDF reports & local launchd routines',
+        body: 'Correlate Contacts, Notes, Mail, Calendar, and Reminders with `context person`, compile PDF dossiers directly via Typst (`report person --output dossier.pdf`), and schedule local `launchd` briefings.',
       },
     ]}
   />
 
   <Compare
     title="Next to cloud OAuth connectors"
-    lead="Routing macOS automation through local apps and a Rust data firewall keeps credentials on-device and unlocks two-way migrations across every account."
+    lead="Routing AI access through local macOS apps and a Rust policy corridor keeps credentials on-device and puts human approval before every write."
     columns={[
       { title: 'Cloud OAuth Connectors', label: 'Direct provider integration' },
-      { title: 'MacFly + Local AI', label: 'Local-first on macOS', badge: 'Privacy-first' },
+      { title: 'MacFly Access Layer', label: 'Local-first on macOS', badge: 'Controlled AI' },
     ]}
     highlight={1}
     rows={[
@@ -168,49 +281,134 @@ macfly skill export --output ./.claude/skills/macfly`;
         ],
       },
       {
-        topic: 'Migrations & backups',
+        topic: 'Data residency & privacy',
         cells: [
-          'Locked into vendor cloud silos.',
-          '**Two-way Markdown/CSV/JSON/HTML pipelines** for Git knowledge bases, Obsidian, Notion, and local archives.',
-        ],
-      },
-      {
-        topic: 'Data residency',
-        cells: [
-          'Emails and notes are transmitted to cloud AI servers.',
-          '**100% local on Apple Silicon** with Ollama/MLX; DLP firewall when using cloud models.',
+          'Emails and notes flow through third-party cloud servers.',
+          '**100% local on Apple Silicon** with Ollama/MLX; automatic DLP secret redaction and denylists when using cloud models.',
         ],
       },
       {
         topic: 'Write & send safety',
         cells: [
           'Broad OAuth scopes (`Mail.Send`) exposed to indirect prompt injection.',
-          '**Drafts by default**, SHA-256 plan approval in interactive TTY, MCP read + plan-only.',
+          '**Drafts by default**, full-content diff preview, strict interactive TTY approval, and MCP read + plan-only.',
+        ],
+      },
+      {
+        topic: 'Migrations & portability',
+        cells: [
+          'Locked into vendor cloud silos.',
+          '**Markdown exports across all 7 apps** plus two-way Markdown/CSV/JSON/HTML migrations for Notes & Reminders.',
         ],
       },
     ]}
-    link={{ label: 'Explore real-world use cases', href: url('demo/') }}
+    link={{ label: 'Explore real-world use cases & prompts', href: url('demo/') }}
   />
 
+  <!-- 6. Open Source & Getting Started -->
   <Quickstart
     title="Get started in two minutes"
-    lead="Install the prebuilt macOS binary (no Rust required) or via crates.io, verify macOS permissions, and audit, automate, or migrate your Apple apps."
+    lead="Install the prebuilt macOS binary (no Rust required) or via crates.io, connect your AI client, and keep every change under your control."
     steps={[
       'Install via the direct shell installer (no Cargo) or <code>cargo install macfly</code>',
-      'Check macOS access &amp; create config: <code>macfly doctor</code> · <code>macfly config init</code>',
-      'Audit &amp; clean up: <code>macfly notes audit</code> · <code>macfly contacts audit</code>',
-      'Export or import: <code>macfly notes export --output ./backup</code> · <code>macfly notes import --input ./docs --folder "00 · Inbox" --recursive</code>',
-      'Connect an MCP client: point stdio to <code>macfly mcp --profile default</code>',
+      'Verify macOS permissions &amp; create your policy config: <code>macfly doctor</code> · <code>macfly config init</code>',
+      'Connect Claude Code, Claude Desktop, Cursor, or Ollama via <code>macfly mcp</code> or <code>macfly skill export</code>',
+      'Ask your AI to audit notes, prepare a briefing, or draft replies — then review &amp; approve the plan in your terminal',
     ]}
   >
-    <CodeBlock title="Terminal, migrations & MCP setup" lang="bash" code={quickstartCode} />
+    <CodeBlock title="Install, connect AI & approve plans" lang="bash" code={quickstartCode} />
   </Quickstart>
 
   {latestRelease && <ReleaseHighlights release={latestRelease} />}
 
   <CallToAction
-    title="See MacFly across five real-world macOS workflows."
+    title="See what your AI can do across five real macOS workflows."
     href={url('demo/')}
-    label="Explore Use Cases"
+    label="Explore Use Cases & Prompts"
   />
 </Base>
+
+<style>
+  .prompts,
+  .ai-setup {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 0 24px var(--section-y);
+  }
+  .eyebrow {
+    margin: 0 0 10px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .prompts h2,
+  .ai-setup h2 {
+    max-width: 24ch;
+    margin: 0 0 14px;
+    color: var(--heading);
+    font-size: var(--h-section);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+  .section-lead {
+    max-width: 64ch;
+    margin: 0 0 32px;
+    font-size: 17.5px;
+    line-height: 1.65;
+  }
+  .section-lead code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--code-bg);
+    font-size: 0.88em;
+  }
+  .prompt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .prompt-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .prompt-card h3 {
+    margin: 0;
+    color: var(--heading);
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .prompt-card blockquote {
+    margin: 0;
+    padding: 12px 14px;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    background: var(--bg-deep);
+    color: var(--heading);
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+  .prompt-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+  .prompt-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+</style>

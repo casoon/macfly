@@ -1,8 +1,12 @@
 # macfly
 
-Local, deterministic macOS automation CLI, migration toolkit, and `stdio` MCP server in pure Rust — with a read-side data firewall and cryptographic plan approval between AI agents and your personal apps.
+**Let AI work with your Mac. On your terms.**
 
-**Documentation:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases](https://casoon.github.io/macfly/demo/) · [Changelog](https://casoon.github.io/macfly/changelog/)
+MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI agents (Claude, Codex, Cursor, or local LLMs via Ollama/MLX) policy-guarded access to Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts, with local secret redaction and human-approved change plans.
+
+> *Your AI knows what to do. MacFly controls what it can do.*
+
+**Website:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases & Prompts](https://casoon.github.io/macfly/demo/) · [Changelog](https://casoon.github.io/macfly/changelog/)
 
 ![MacFly terminal demo: macfly doctor, notes audit, and 360° person dossier](./assets/casts/hero.svg)
 
