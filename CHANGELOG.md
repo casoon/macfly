@@ -3,6 +3,12 @@
 All notable changes to MacFly are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- **Mail:** `macfly mail list` and `macfly mail search` no longer time out on large mailboxes (e.g. an iCloud INBOX with ~40,000 messages); messages are now addressed by id and searches read subject and sender in one batch, so both finish in a few seconds.
+- **Mail:** `macfly mail overview` reports the unread count of every mailbox instead of 0 for all but the first account's inbox.
+
 ## [0.5.0] - 2026-11-22
 
 ### Added
