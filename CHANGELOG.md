@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - **Mail:** `macfly mail list` and `macfly mail search` no longer time out on large mailboxes (e.g. an iCloud INBOX with ~40,000 messages); messages are now addressed by id and searches read subject and sender in one batch, so both finish in a few seconds.
 - **Mail:** `macfly mail read` and `macfly mail export` look a message up by id instead of scanning every mailbox, so a single read takes about a second even in a large iCloud INBOX.
+- **Plans:** applying `mail_mark_read` and `mail_move` operations finds the message by id as well, so they no longer stall on large mailboxes.
 - **Mail:** the default `INBOX` filter also matches localized inboxes such as Exchange's `Posteingang`, so `mail list`, `mail search` and `mail read` no longer skip them.
 - **Mail:** `macfly mail overview` reports the unread count of every mailbox instead of 0 for all but the first account's inbox.
 
