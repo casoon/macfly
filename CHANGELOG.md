@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-25
+
 ### Breaking
 
 - **Plans:** under the new default preset `balanced`, low-risk plans (new notes, folders, mail drafts, reminders) are created as `approved` without `macfly plan approve`; `"preset": "strict"` keeps the old behaviour. Details: [Security Presets](https://casoon.github.io/macfly/docs/guide/plans-and-workflows/#security-presets).
@@ -23,6 +25,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **DLP:** `credit_card` also matches card numbers without separators (13–19 digits) and only redacts numbers with a valid Luhn checksum.
 - **CLI:** `--no-redact` on `notes read/export` and `mail read/export` only works in an interactive terminal.
 - **Skill:** the exported `SKILL.md` tells agents to apply auto-approved plans, hand pending ones to the user, and never fake a terminal or edit MacFly's config and plan files.
+
+### Fixed
+
+- **Mail:** `macfly mail list` and `macfly mail search` no longer time out on large mailboxes (e.g. an iCloud INBOX with ~40,000 messages); messages are now addressed by id and searches read subject and sender in one batch, so both finish in a few seconds.
+- **Mail:** `macfly mail read` and `macfly mail export` look a message up by id instead of scanning every mailbox, so a single read takes about a second even in a large iCloud INBOX.
+- **Mail:** the default `INBOX` filter also matches localized inboxes such as Exchange's `Posteingang`, so `mail list`, `mail search` and `mail read` no longer skip them.
+- **Mail:** `macfly mail overview` reports the unread count of every mailbox instead of 0 for all but the first account's inbox.
+- **Plans:** applying `mail_mark_read` and `mail_move` operations finds the message by id as well, so they no longer stall on large mailboxes.
 
 ### Security
 

@@ -22,6 +22,36 @@ function findMailbox(Mail, accountName, mailboxName) {
   throw new Error("Postfach nicht gefunden: " + accountName + "/" + mailboxName);
 }
 
+// Message ids are global in Apple Mail: byId resolves the message wherever it
+// lives in a few ms, while a whose() id filter scans the whole mailbox (seconds
+// on large ones). Accept the message only if it really sits in the given
+// mailbox: either it reports that mailbox itself, or (e.g. a Gmail label next
+// to "All Mail") its id is in the mailbox's id column.
+function findMessage(found, localId) {
+  const id = Number(localId);
+  const notFound = new Error("Mail nicht gefunden: " + localId);
+  if (!Number.isInteger(id)) throw notFound;
+  const msg = found.mailbox.messages.byId(id);
+  if (!msg.exists()) throw notFound;
+  let sameMailbox = false;
+  try {
+    const own = msg.mailbox;
+    sameMailbox =
+      String(own.name()) === String(found.mailbox.name()) &&
+      String(own.account.name()) === String(found.account.name());
+  } catch (_) {
+    sameMailbox = false;
+  }
+  if (!sameMailbox) {
+    let ids = [];
+    try {
+      ids = found.mailbox.messages.id() || [];
+    } catch (_) {}
+    if (ids.indexOf(id) === -1) throw notFound;
+  }
+  return msg;
+}
+
 (function () {
   const input = readInput();
   const Mail = Application("Mail");
@@ -91,11 +121,7 @@ function findMailbox(Mail, accountName, mailboxName) {
 
   if (action === "mail_mark_read") {
     const found = findMailbox(Mail, input.account, input.mailbox);
-    const matches = found.mailbox.messages.whose({ id: Number(input.local_id) })();
-    if (!matches || matches.length === 0) {
-      throw new Error("Mail nicht gefunden: " + input.local_id);
-    }
-    matches[0].readStatus = Boolean(input.read);
+    findMessage(found, input.local_id).readStatus = Boolean(input.read);
     return JSON.stringify({
       ok: true,
       detail:
@@ -106,11 +132,7 @@ function findMailbox(Mail, accountName, mailboxName) {
   if (action === "mail_move") {
     const src = findMailbox(Mail, input.account, input.from_mailbox);
     const dst = findMailbox(Mail, input.account, input.to_mailbox);
-    const matches = src.mailbox.messages.whose({ id: Number(input.local_id) })();
-    if (!matches || matches.length === 0) {
-      throw new Error("Mail nicht gefunden: " + input.local_id);
-    }
-    Mail.move(matches[0], { to: dst.mailbox });
+    Mail.move(findMessage(src, input.local_id), { to: dst.mailbox });
     return JSON.stringify({
       ok: true,
       detail:

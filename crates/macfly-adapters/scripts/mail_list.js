@@ -6,6 +6,34 @@ function readInput() {
   return raw && raw.trim().length > 0 ? JSON.parse(raw) : {};
 }
 
+// Apple Mail's own inbox name per account ("INBOX", "Posteingang", ...), keyed
+// by lower-case account name, so a mailbox filter of "inbox" also finds
+// localized inboxes such as Exchange's.
+function inboxNames(Mail) {
+  const map = {};
+  try {
+    const mbs = Mail.inbox.mailboxes();
+    for (let i = 0; i < mbs.length; i++) {
+      try {
+        map[String(mbs[i].account.name()).toLowerCase()] = String(mbs[i].name()).toLowerCase();
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return map;
+}
+
+function mailboxMatches(filter, mbLower, accLower, inboxes) {
+  return mbLower === filter || (filter === "inbox" && inboxes[accLower] === mbLower);
+}
+
+function readStatusOf(msg) {
+  try {
+    return Boolean(msg.readStatus());
+  } catch (_) {
+    return true;
+  }
+}
+
 function isoOrNull(val) {
   if (!val) return null;
   try {
@@ -31,6 +59,7 @@ function isoOrNull(val) {
   const Mail = Application("Mail");
   const out = [];
   const accounts = Mail.accounts();
+  const inboxes = mailboxFilter === "inbox" ? inboxNames(Mail) : {};
 
   for (let i = 0; i < accounts.length; i++) {
     const acc = accounts[i];
@@ -47,28 +76,66 @@ function isoOrNull(val) {
       const mbLower = mbName.toLowerCase();
 
       if (denyMailboxes.includes(mbLower)) continue;
-      if (mailboxFilter !== "*" && mbLower !== mailboxFilter) continue;
+      if (
+        mailboxFilter !== "*" &&
+        !mailboxMatches(mailboxFilter, mbLower, accLower, inboxes)
+      ) {
+        continue;
+      }
 
-      const total = mb.messages.length;
-      if (total === 0) continue;
+      // Fetch all message ids in one Apple Event (newest first, same order as
+      // the index). Addressing messages by index makes Mail re-resolve the whole
+      // mailbox per access (~1 s each on large mailboxes); by id it is ~ms.
+      let ids = [];
+      try {
+        ids = mb.messages.id() || [];
+      } catch (_) {
+        ids = [];
+      }
+      if (ids.length === 0) continue;
 
-      const toScan = Math.min(total, scanLimit);
-      for (let k = 0; k < toScan; k++) {
-        const msg = mb.messages[k];
-        let isRead = true;
+      const toScan = Math.min(ids.length, scanLimit);
+
+      // For a search, read subject and sender as whole columns (one Apple Event
+      // each) instead of two events per scanned message; only matches are then
+      // touched individually.
+      let subjects = null;
+      let senders = null;
+      if (query) {
         try {
-          isRead = Boolean(msg.readStatus());
-        } catch (_) {}
+          subjects = mb.messages.subject();
+          senders = mb.messages.sender();
+          if (subjects.length !== ids.length || senders.length !== ids.length) {
+            subjects = null;
+            senders = null;
+          }
+        } catch (_) {
+          subjects = null;
+          senders = null;
+        }
+      }
+
+      for (let k = 0; k < toScan; k++) {
+        const msg = mb.messages.byId(ids[k]);
+
+        // Without column data, check the cheap unread filter before fetching
+        // subject and sender.
+        let isRead = subjects ? null : readStatusOf(msg);
         if (unreadOnly && isRead) continue;
 
         let subject = "(Ohne Betreff)";
         let sender = "";
-        try {
-          subject = String(msg.subject() || "(Ohne Betreff)");
-        } catch (_) {}
-        try {
-          sender = String(msg.sender() || "");
-        } catch (_) {}
+        if (subjects) {
+          subject = String(subjects[k] || "(Ohne Betreff)");
+          sender = String(senders[k] || "");
+        } else {
+          try {
+            subject = String(msg.subject() || "(Ohne Betreff)");
+          } catch (_) {}
+          try {
+            sender = String(msg.sender() || "");
+          } catch (_) {}
+        }
 
         if (
           query &&
@@ -78,13 +145,15 @@ function isoOrNull(val) {
           continue;
         }
 
-        let localId = "";
+        if (isRead === null) {
+          isRead = readStatusOf(msg);
+          if (unreadOnly && isRead) continue;
+        }
+
+        const localId = String(ids[k]);
         let rfcId = null;
         let dateRecv = null;
         let flagged = false;
-        try {
-          localId = String(msg.id());
-        } catch (_) {}
         try {
           const mid = msg.messageId();
           if (mid) rfcId = String(mid);
