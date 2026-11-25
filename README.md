@@ -6,6 +6,8 @@ MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI 
 
 > *Your AI knows what to do. MacFly controls what it can do.*
 
+**macOS only** — MacFly runs on Macs (Apple Silicon or Intel) and drives the Apple apps through macOS Automation. There is no Windows, Linux or iOS version.
+
 **Website:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases & Prompts](https://casoon.github.io/macfly/demo/) · [Changelog](https://casoon.github.io/macfly/changelog/)
 
 ![MacFly terminal demo: macfly doctor, notes audit, and 360° person dossier](./assets/casts/hero.svg)
