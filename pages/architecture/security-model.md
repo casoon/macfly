@@ -62,8 +62,14 @@ pipeline before leaving the process:
    - `private_key` (PEM private key blocks)
    - `api_key` (`sk-...`, `ghp_...`, `AKIA...`, `AIza...`, `xox...`)
    - `iban` (European IBAN formats)
-   - `credit_card` (16-digit card numbers)
+   - `credit_card` (13–19 digit card numbers with or without separators, only
+     if the Luhn checksum is valid)
    - `otp_code` (context-bound 6-digit verification / TAN / 2FA codes)
+   - `password` (the value after `Passwort:`, `Kennwort:`, `Password=`, `PIN:`
+     and similar keywords; the keyword itself stays readable)
+
+   The `redact` list in a profile is explicit: a config written before a rule
+   existed only gets it after the rule name is added to `redact`.
 3. **Untrusted-data framing:** Incoming emails are explicitly tagged with
    `"trust_level": "untrusted_external"` and a `content_warning` reminding the
    consuming agent to treat the body strictly as data, never as instructions.

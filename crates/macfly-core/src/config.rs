@@ -341,6 +341,7 @@ fn default_dlp_rules() -> Vec<String> {
         "iban".to_string(),
         "credit_card".to_string(),
         "otp_code".to_string(),
+        "password".to_string(),
     ]
 }
 

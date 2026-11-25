@@ -15,10 +15,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Config:** security presets `strict`, `balanced` (default) and `open` per profile (`"preset"`), chosen once by `macfly config init` or `--preset`.
 - **CLI:** `macfly policy` explains in plain language what the active profile may do; `macfly doctor` shows the preset and warns while `open` is active.
 - **MCP:** `plan_apply` runs plans that are already approved (by the preset or by you); `plan_approve` stays unavailable over MCP.
+- **DLP:** new `password` rule redacts the value after keywords like `Passwort:`, `Kennwort:` or `PIN=` (part of the default `redact` list; existing configs add `"password"` themselves).
 - **Plans:** `approved_by` records whether a plan was approved by a preset (`preset:<name>`) or by a human.
 
 ### Changed
 
+- **DLP:** `credit_card` also matches card numbers without separators (13–19 digits) and only redacts numbers with a valid Luhn checksum.
 - **CLI:** `--no-redact` on `notes read/export` and `mail read/export` only works in an interactive terminal.
 - **Skill:** the exported `SKILL.md` tells agents to apply auto-approved plans, hand pending ones to the user, and never fake a terminal or edit MacFly's config and plan files.
 

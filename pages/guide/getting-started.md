@@ -90,7 +90,7 @@ duplicating it:
       },
       "dlp": {
         "enabled": true,
-        "redact": ["private_key", "api_key", "iban", "credit_card", "otp_code"],
+        "redact": ["private_key", "api_key", "iban", "credit_card", "otp_code", "password"],
         "max_body_chars": 12000
       }
     }
