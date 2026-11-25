@@ -37,6 +37,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Security
 
 - **Plans:** the approval code is random instead of derived from the plan hash, and it no longer appears in plan output, JSON, MCP responses or the error for a wrong code.
+- **Releases:** macOS binaries carry signed build provenance; verify a download with `gh attestation verify` (see README).
 
 ## [0.5.0] - 2026-11-22
 

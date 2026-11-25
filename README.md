@@ -52,6 +52,15 @@ macfly doctor
 macfly config init   # asks for the security preset (strict / balanced / open)
 ```
 
+Official binaries come only from the GitHub releases of `casoon/macfly` — built
+there by the release workflow, never on a developer machine. To verify a
+download by hand, check the hash and the signed build provenance:
+
+```sh
+shasum -a 256 -c SHA256SUMS --ignore-missing
+gh attestation verify macfly-aarch64-apple-darwin.tar.gz --repo casoon/macfly
+```
+
 Everyday commands (all support `--format pretty`, `--format json`, and `--format agent`, plus `--color auto|always|never`):
 
 ```sh
