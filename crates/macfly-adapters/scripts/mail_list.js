@@ -6,6 +6,26 @@ function readInput() {
   return raw && raw.trim().length > 0 ? JSON.parse(raw) : {};
 }
 
+// Apple Mail's own inbox name per account ("INBOX", "Posteingang", ...), keyed
+// by lower-case account name, so a mailbox filter of "inbox" also finds
+// localized inboxes such as Exchange's.
+function inboxNames(Mail) {
+  const map = {};
+  try {
+    const mbs = Mail.inbox.mailboxes();
+    for (let i = 0; i < mbs.length; i++) {
+      try {
+        map[String(mbs[i].account.name()).toLowerCase()] = String(mbs[i].name()).toLowerCase();
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return map;
+}
+
+function mailboxMatches(filter, mbLower, accLower, inboxes) {
+  return mbLower === filter || (filter === "inbox" && inboxes[accLower] === mbLower);
+}
+
 function readStatusOf(msg) {
   try {
     return Boolean(msg.readStatus());
@@ -39,6 +59,7 @@ function isoOrNull(val) {
   const Mail = Application("Mail");
   const out = [];
   const accounts = Mail.accounts();
+  const inboxes = mailboxFilter === "inbox" ? inboxNames(Mail) : {};
 
   for (let i = 0; i < accounts.length; i++) {
     const acc = accounts[i];
@@ -55,7 +76,12 @@ function isoOrNull(val) {
       const mbLower = mbName.toLowerCase();
 
       if (denyMailboxes.includes(mbLower)) continue;
-      if (mailboxFilter !== "*" && mbLower !== mailboxFilter) continue;
+      if (
+        mailboxFilter !== "*" &&
+        !mailboxMatches(mailboxFilter, mbLower, accLower, inboxes)
+      ) {
+        continue;
+      }
 
       // Fetch all message ids in one Apple Event (newest first, same order as
       // the index). Addressing messages by index makes Mail re-resolve the whole
