@@ -3,6 +3,29 @@
 All notable changes to MacFly are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Breaking
+
+- **Plans:** under the new default preset `balanced`, low-risk plans (new notes, folders, mail drafts, reminders) are created as `approved` without `macfly plan approve`; `"preset": "strict"` keeps the old behaviour. Details: [Security Presets](https://casoon.github.io/macfly/docs/guide/plans-and-workflows/#security-presets).
+- **CLI:** `macfly plan approve` no longer accepts `--confirm-code`; the code is typed at the interactive prompt.
+
+### Added
+
+- **Config:** security presets `strict`, `balanced` (default) and `open` per profile (`"preset"`), chosen once by `macfly config init` or `--preset`.
+- **CLI:** `macfly policy` explains in plain language what the active profile may do; `macfly doctor` shows the preset and warns while `open` is active.
+- **MCP:** `plan_apply` runs plans that are already approved (by the preset or by you); `plan_approve` stays unavailable over MCP.
+- **Plans:** `approved_by` records whether a plan was approved by a preset (`preset:<name>`) or by a human.
+
+### Changed
+
+- **CLI:** `--no-redact` on `notes read/export` and `mail read/export` only works in an interactive terminal.
+- **Skill:** the exported `SKILL.md` tells agents to apply auto-approved plans, hand pending ones to the user, and never fake a terminal or edit MacFly's config and plan files.
+
+### Security
+
+- **Plans:** the approval code is random instead of derived from the plan hash, and it no longer appears in plan output, JSON, MCP responses or the error for a wrong code.
+
 ## [0.5.0] - 2026-11-22
 
 ### Added

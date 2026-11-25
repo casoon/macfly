@@ -48,6 +48,19 @@ Notes** and **Apple Mail**. If a permission is missing, `macfly doctor` reports
 macfly config init
 ```
 
+`config init` asks once which **security preset** should apply (skip the
+question with `--preset strict|balanced|open`):
+
+- **`strict`** — every change needs your approval in the terminal.
+- **`balanced`** (default) — creating notes, folders, mail drafts and reminders
+  runs automatically; moving, appending, deleting and Shortcuts need your
+  approval.
+- **`open`** — additionally moving, appending and deleting empty folders runs
+  automatically, for cleanup and migration sessions.
+
+`macfly policy` shows in plain language what the active profile may do. See
+[Security Presets](/macfly/docs/guide/plans-and-workflows/#security-presets).
+
 This creates `~/.config/macfly/config.json` (overridable via `$MACFLY_CONFIG`
 or `--config`). You can define multiple named profiles (e.g. `default`,
 `work-readonly`) and keep your email signature in Apple Mail instead of
@@ -60,6 +73,7 @@ duplicating it:
   "script_timeout_secs": 25,
   "profiles": {
     "default": {
+      "preset": "balanced",
       "notes": {
         "allow_accounts": [],
         "allow_folders": [],

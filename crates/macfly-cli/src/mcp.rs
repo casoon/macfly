@@ -5,12 +5,14 @@ use macfly_adapters::contacts::ContactsAdapter;
 use macfly_adapters::context::{
     build_daily_brief, build_meeting_prep, build_person_context, build_weekly_review,
 };
+use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::{Config, ProfileConfig};
 use macfly_core::error::MacflyError;
+use macfly_core::journal::AuditJournal;
 use macfly_core::plan::{PlanProposal, PlanStore};
 use serde_json::{Value, json};
 
@@ -35,9 +37,10 @@ fn negotiate_protocol_version(requested: Option<&str>) -> &'static str {
 }
 
 /// Dünner MCP-Server über `stdio` (JSON-RPC 2.0).
-/// Sicherheitsdesign: Exponiert NUR Read-Tools sowie `plan_create` / `plan_inspect`.
-/// `plan_approve` und `plan_apply` sind absichtlich NICHT über MCP erreichbar,
-/// damit kein KI-Agent seine eigenen Änderungspläne freigeben oder ausführen kann.
+/// Sicherheitsdesign: Exponiert Read-Tools sowie `plan_create` / `plan_inspect` / `plan_apply`.
+/// `plan_approve` ist absichtlich NICHT über MCP erreichbar: Freigaben kommen nur von der
+/// Sicherheitsstufe des Profils oder von einem Menschen im Terminal. `plan_apply` führt
+/// ausschließlich bereits freigegebene Pläne aus.
 pub fn run_mcp_server(
     cfg: &Config,
     profile_name: &str,
@@ -100,7 +103,10 @@ pub fn run_mcp_server(
             }),
             "tools/call" => {
                 let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                let args = params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
                 match dispatch_tool(cfg, profile_name, profile, tool_name, &args) {
                     Ok(payload) => json!({
                         "jsonrpc": "2.0",
@@ -145,11 +151,11 @@ fn tool_definitions() -> Value {
     if let Some(arr) = tools.as_array_mut() {
         for tool in arr {
             let name = tool.get("name").and_then(Value::as_str).unwrap_or("");
-            let is_plan_create = name == "plan_create";
+            let writes = name == "plan_create" || name == "plan_apply";
             let annotations = json!({
-                "readOnlyHint": !is_plan_create,
-                "destructiveHint": false,
-                "idempotentHint": !is_plan_create,
+                "readOnlyHint": !writes,
+                "destructiveHint": name == "plan_apply",
+                "idempotentHint": !writes,
                 "openWorldHint": false
             });
             if let Some(obj) = tool.as_object_mut() {
@@ -315,13 +321,25 @@ fn raw_tool_definitions() -> Value {
         },
         {
             "name": "plan_create",
-            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus — der Nutzer gibt den Plan separat im Terminal frei.",
+            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus. Je nach Sicherheitsstufe des Profils ist der Plan sofort freigegeben (status `approved`, dann `plan_apply` aufrufen) oder wartet auf die Freigabe des Nutzers im Terminal (status `pending_approval`, dann dem Nutzer `macfly plan approve <plan_id>` nennen).",
             "inputSchema": {
                 "type": "object",
                 "required": ["operations"],
                 "properties": {
                     "summary": { "type": "string" },
                     "operations": { "type": "array", "items": { "type": "object" } }
+                }
+            }
+        },
+        {
+            "name": "plan_apply",
+            "description": "Führt einen bereits freigegebenen Änderungsplan aus (status `approved`, durch Sicherheitsstufe oder Nutzer). Nicht freigegebene Pläne werden abgelehnt. Mit `resume: true` wird ein teilweise ausgeführter Plan fortgesetzt.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["plan_id"],
+                "properties": {
+                    "plan_id": { "type": "string" },
+                    "resume": { "type": "boolean" }
                 }
             }
         },
@@ -348,16 +366,25 @@ fn dispatch_tool(
     let mail = MailAdapter::new(cfg.script_timeout_secs);
 
     match name {
-        "notes_overview" => Ok(serde_json::to_value(notes.overview(profile_name, profile)?)?),
+        "notes_overview" => Ok(serde_json::to_value(
+            notes.overview(profile_name, profile)?,
+        )?),
         "notes_audit" => Ok(serde_json::to_value(notes.audit(profile_name, profile)?)?),
         "notes_list" => {
             let q = ListNotesQuery {
-                account: args.get("account").and_then(Value::as_str).map(String::from),
+                account: args
+                    .get("account")
+                    .and_then(Value::as_str)
+                    .map(String::from),
                 folder: args.get("folder").and_then(Value::as_str).map(String::from),
                 query: args.get("query").and_then(Value::as_str).map(String::from),
                 limit: args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize,
             };
-            Ok(serde_json::to_value(notes.list(profile_name, profile, &q)?)?)
+            Ok(serde_json::to_value(notes.list(
+                profile_name,
+                profile,
+                &q,
+            )?)?)
         }
         "notes_read" => {
             let id = args
@@ -375,8 +402,14 @@ fn dispatch_tool(
         "mail_overview" => Ok(serde_json::to_value(mail.overview(profile_name, profile)?)?),
         "mail_list" => {
             let q = ListMailQuery {
-                account: args.get("account").and_then(Value::as_str).map(String::from),
-                mailbox: args.get("mailbox").and_then(Value::as_str).map(String::from),
+                account: args
+                    .get("account")
+                    .and_then(Value::as_str)
+                    .map(String::from),
+                mailbox: args
+                    .get("mailbox")
+                    .and_then(Value::as_str)
+                    .map(String::from),
                 unread_only: args
                     .get("unread_only")
                     .and_then(Value::as_bool)
@@ -385,7 +418,11 @@ fn dispatch_tool(
                 limit: args.get("limit").and_then(Value::as_u64).unwrap_or(25) as usize,
                 scan_limit: 150,
             };
-            Ok(serde_json::to_value(mail.list(profile_name, profile, &q)?)?)
+            Ok(serde_json::to_value(mail.list(
+                profile_name,
+                profile,
+                &q,
+            )?)?)
         }
         "mail_read" => {
             let local_id = args
@@ -478,7 +515,7 @@ fn dispatch_tool(
             let proposal: PlanProposal = serde_json::from_value(args.clone())?;
             let store = PlanStore::default_store();
             let stored = store.create(profile_name, profile, proposal, 900)?;
-            Ok(serde_json::to_value(stored)?)
+            Ok(serde_json::to_value(stored.for_output())?)
         }
         "plan_inspect" => {
             let plan_id = args
@@ -487,7 +524,24 @@ fn dispatch_tool(
                 .ok_or_else(|| MacflyError::PlanError("Parameter `plan_id` fehlt".to_string()))?;
             let store = PlanStore::default_store();
             let stored = store.load(plan_id)?;
-            Ok(serde_json::to_value(stored)?)
+            Ok(serde_json::to_value(stored.for_output())?)
+        }
+        "plan_apply" => {
+            let plan_id = args
+                .get("plan_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| MacflyError::PlanError("Parameter `plan_id` fehlt".to_string()))?;
+            let resume = args.get("resume").and_then(Value::as_bool).unwrap_or(false);
+            let report = apply_approved_plan(
+                &PlanStore::default_store(),
+                &AuditJournal::default_journal(),
+                plan_id,
+                profile_name,
+                profile,
+                cfg.script_timeout_secs,
+                resume,
+            )?;
+            Ok(serde_json::to_value(report)?)
         }
         _ => Err(MacflyError::NotFound(format!(
             "Unbekanntes MCP-Tool '{name}'"
@@ -512,19 +566,18 @@ mod tests {
     }
 
     #[test]
-    fn mcp_tools_have_annotations_and_never_expose_approve_or_apply() {
+    fn mcp_tools_have_annotations_and_never_expose_approve() {
         let tools = tool_definitions();
         let arr = tools.as_array().expect("tools must be an array");
-        assert_eq!(arr.len(), 19);
+        assert_eq!(arr.len(), 20);
         for tool in arr {
             let name = tool["name"].as_str().unwrap();
             assert_ne!(name, "plan_approve");
-            assert_ne!(name, "plan_apply");
             let ann = tool["annotations"]
                 .as_object()
                 .expect("every MCP tool must carry annotations");
-            assert_eq!(ann["destructiveHint"].as_bool(), Some(false));
-            if name == "plan_create" {
+            assert_eq!(ann["destructiveHint"].as_bool(), Some(name == "plan_apply"));
+            if name == "plan_create" || name == "plan_apply" {
                 assert_eq!(ann["readOnlyHint"].as_bool(), Some(false));
             } else {
                 assert_eq!(ann["readOnlyHint"].as_bool(), Some(true));

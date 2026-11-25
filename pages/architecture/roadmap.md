@@ -31,11 +31,12 @@ order: 3
 - **Terminal presentation with `runemark`:** semantic verdicts, reports,
   error blocks, and `NO_COLOR` support
 - **Hardened, resumable plan engine:** `plan create → inspect → approve → apply`
-  with full-content diff previews, SHA-256 tamper detection, strict interactive
-  TTY guard (also with `--confirm-code`), exclusive `.lock` files,
+  with full-content diff previews, SHA-256 tamper detection, security presets
+  (`strict` / `balanced` / `open`) with `macfly policy`, interactive approval
+  with a random code, exclusive `.lock` files,
   `partially_applied` status with `--resume`, and JSONL audit journal
-- **Built-in `macfly mcp` (`stdio`) server** exposing 19 read, context-pack &
-  plan-propose tools with protocol negotiation (up to `2026-07-28`) and MCP tool
+- **Built-in `macfly mcp` (`stdio`) server** exposing 20 read, context-pack,
+  plan-propose and apply-approved tools with protocol negotiation (up to `2026-07-28`) and MCP tool
   annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 - **Agent Skill Export & `launchd` scheduler:** `macfly skill export` and
   `macfly schedule install` / `list` / `remove`

@@ -97,13 +97,14 @@ const quickstartCode = `# 1. Install (no Cargo needed) & verify macOS access
 curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
 # or: cargo install macfly
 macfly doctor
-macfly config init
+macfly config init   # pick a security preset: strict · balanced · open
+macfly policy        # what your AI may do, in plain language
 
 # 2. Connect your AI client (MCP or Agent SKILL.md)
 claude mcp add macfly -- macfly mcp --profile default
 macfly skill export --output ./.claude/skills/macfly
 
-# 3. Review & approve any change your AI proposes
+# 3. Low-risk changes run under your preset — review & approve the rest
 macfly plan list
 macfly plan inspect <plan-id>
 macfly plan approve <plan-id>
@@ -131,7 +132,7 @@ macfly plan apply <plan-id>`;
     <Badges>
       <Badge>AI-first</Badge>
       <Badge>Local-first</Badge>
-      <Badge>Human-approved writes</Badge>
+      <Badge>Preset-guarded writes</Badge>
       <Badge>Open Source · v{config.version}</Badge>
     </Badges>
     <Fragment
@@ -183,15 +184,15 @@ macfly plan apply <plan-id>`;
       },
       {
         label: '2 · Plan',
-        artifact: '19 MCP tools / CLI',
+        artifact: '20 MCP tools / CLI',
         title: 'Your AI proposes steps',
         body: 'Claude, Codex, Cursor, or Ollama reads DLP-filtered context and submits a typed change plan.',
       },
       {
         label: '3 · Control',
-        artifact: 'Diff + TTY approval',
+        artifact: 'Preset + diff approval',
         title: 'MacFly checks & asks you',
-        body: 'Policy denylists, full-content draft/note diffs, risk levels, and mandatory interactive TTY approval.',
+        body: 'Policy denylists, full-content draft/note diffs and risk levels. Your security preset lets low-risk creates through and asks you for everything else.',
       },
       {
         label: '4 · Execute',
@@ -243,8 +244,8 @@ macfly plan apply <plan-id>`;
   <Facts
     items={[
       { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
-      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — over MCP, agents cannot approve or apply writes' },
-      { value: '0 blind writes', label: 'full-content diff preview, strict interactive TTY approval, execution lock, and resumable plans' },
+      { value: '20 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
+      { value: '3 presets', label: 'strict, balanced or open — one choice instead of a rulebook, explained by `macfly policy`' },
       { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}
   />
@@ -253,8 +254,8 @@ macfly plan apply <plan-id>`;
     heading="Technical architecture under the hood"
     items={[
       {
-        title: 'Strict separation of proposal and execution',
-        body: 'MCP exposes read tools, cross-app context packs, and `plan_create` — never `plan_approve` or `plan_apply`. Even under indirect prompt injection, an agent cannot self-approve changes.',
+        title: 'Agents propose, your preset decides',
+        body: 'MCP exposes read tools, cross-app context packs, `plan_create` and `plan_apply` for already-approved plans — never `plan_approve`. Which plans run automatically is set by your preset (`strict`, `balanced`, `open`), not by the agent, even under indirect prompt injection.',
       },
       {
         title: 'Read-side Data Firewall (DLP) & profile denylists',
@@ -281,7 +282,7 @@ macfly plan apply <plan-id>`;
 
   <Compare
     title="Next to cloud OAuth connectors"
-    lead="Routing AI access through local macOS apps and a Rust policy corridor keeps credentials on-device and puts human approval before every write."
+    lead="Routing AI access through local macOS apps and a Rust policy corridor keeps credentials on-device and puts your approval before every risky write."
     columns={[
       { title: 'Cloud OAuth Connectors', label: 'Direct provider integration' },
       { title: 'MacFly Access Layer', label: 'Local-first on macOS', badge: 'Controlled AI' },
@@ -306,7 +307,7 @@ macfly plan apply <plan-id>`;
         topic: 'Write & send safety',
         cells: [
           'Broad OAuth scopes (`Mail.Send`) exposed to indirect prompt injection.',
-          '**Drafts by default**, full-content diff preview, strict interactive TTY approval, and MCP read + plan-only.',
+          '**Drafts only, never sent**, full-content diff preview, security presets with interactive approval for risky changes, and no plan approval over MCP.',
         ],
       },
       {
@@ -328,7 +329,7 @@ macfly plan apply <plan-id>`;
       'Install via the direct shell installer (no Cargo) or <code>cargo install macfly</code>',
       'Verify macOS permissions &amp; create your policy config: <code>macfly doctor</code> · <code>macfly config init</code>',
       'Connect Claude Code, Claude Desktop, Cursor, or Ollama via <code>macfly mcp</code> or <code>macfly skill export</code>',
-      'Ask your AI to audit notes, prepare a briefing, or draft replies — then review &amp; approve the plan in your terminal',
+      'Ask your AI to audit notes, prepare a briefing, or draft replies — low-risk plans run under your preset, the rest you approve in your terminal',
     ]}
   >
     <CodeBlock title="Install, connect AI & approve plans" lang="bash" code={quickstartCode} />

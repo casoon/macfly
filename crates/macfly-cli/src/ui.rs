@@ -32,6 +32,7 @@ pub fn render_doctor(
     config_path: &str,
     config_exists: bool,
     profile: &str,
+    preset: &str,
     notes_access: &str,
     notes_accounts: Option<usize>,
     notes_total: Option<usize>,
@@ -71,7 +72,14 @@ pub fn render_doctor(
                 if config_exists { "loaded" } else { "defaults" }
             ),
         ))
-        .add_metric(Metric::new("Profile", profile));
+        .add_metric(Metric::new("Profile", profile))
+        .add_metric(
+            Metric::new("Preset", preset).with_tone(if preset == "open" {
+                Tone::Warning
+            } else {
+                Tone::Success
+            }),
+        );
 
     let mut adapters = FindingGroup::new("macOS Adapters");
     if notes_access == "ok" {
@@ -333,10 +341,14 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
             "Reversibility",
             format!("{:?}", plan.reversibility),
         ))
-        .add_metric(Metric::new("Approval code", &plan.approval_code).with_tone(Tone::Warning))
+        .add_metric(Metric::new(
+            "Approved by",
+            plan.approved_by.as_deref().unwrap_or("pending"),
+        ))
         .add_metric(Metric::new("Hash", &plan.plan_hash));
 
-    let mut ops = FindingGroup::new("Planned operations (full preview)").with_total_count(plan.operations.len());
+    let mut ops = FindingGroup::new("Planned operations (full preview)")
+        .with_total_count(plan.operations.len());
     for op in &plan.operations {
         let tone = match op.risk_level() {
             RiskLevel::High => Tone::Warning,
@@ -369,6 +381,113 @@ pub fn render_plan(plan: &StoredPlan, color: ColorMode) {
     }
 
     print!("{}", report.render(console));
+}
+
+pub fn render_policy(rep: &crate::PolicyReport, color: ColorMode) {
+    let console = Console::stdout(color);
+    let verdict = if rep.preset == "open" {
+        Verdict::Warning
+    } else {
+        Verdict::Info
+    };
+    let mut report = Report::new(format!("MacFly Policy · {}", rep.profile), verdict)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(Metric::new("Preset", rep.preset))
+        .add_metric(Metric::new(
+            "DLP",
+            if rep.dlp_enabled {
+                rep.dlp_rules.join(", ")
+            } else {
+                "off".to_string()
+            },
+        ))
+        .add_metric(Metric::new("Unredacted reads", rep.unredacted_reads));
+
+    let mut about = FindingGroup::new("Sicherheitsstufe");
+    about = about.add_finding(Finding::new(Tone::Info, rep.preset_description));
+    report = report.add_group(about);
+
+    let mut auto = FindingGroup::new("Läuft automatisch (mit Audit-Journal)");
+    if rep.auto_approved_actions.is_empty() {
+        auto = auto.add_finding(Finding::new(
+            Tone::Info,
+            "nichts — jede Änderung braucht deine Freigabe",
+        ));
+    }
+    for a in &rep.auto_approved_actions {
+        auto = auto.add_finding(Finding::new(Tone::Success, *a));
+    }
+    if let Some(max) = rep.max_auto_operations {
+        auto = auto.add_finding(Finding::new(
+            Tone::Info,
+            format!("nur Pläne mit höchstens {max} Operationen"),
+        ));
+    }
+    report = report.add_group(auto);
+
+    let mut manual = FindingGroup::new("Braucht deine Freigabe (macfly plan approve)");
+    for a in &rep.approval_required_actions {
+        manual = manual.add_finding(Finding::new(Tone::Warning, *a));
+    }
+    report = report.add_group(manual);
+
+    let mut scope = FindingGroup::new("Sperren & Allowlists");
+    scope = scope.add_finding(Finding::new(
+        Tone::Info,
+        format!(
+            "Gesperrte Notes-Ordner: {}",
+            list_or_dash(&rep.notes_deny_folders)
+        ),
+    ));
+    if !rep.notes_allow_folders.is_empty() {
+        scope = scope.add_finding(Finding::new(
+            Tone::Info,
+            format!(
+                "Nur diese Notes-Ordner: {}",
+                rep.notes_allow_folders.join(", ")
+            ),
+        ));
+    }
+    if !rep.mail_allow_accounts.is_empty() {
+        scope = scope.add_finding(Finding::new(
+            Tone::Info,
+            format!(
+                "Nur diese Mail-Accounts: {}",
+                rep.mail_allow_accounts.join(", ")
+            ),
+        ));
+    }
+    scope = scope.add_finding(Finding::new(
+        Tone::Info,
+        format!(
+            "Gesperrte Postfächer: {}",
+            list_or_dash(&rep.mail_deny_mailboxes)
+        ),
+    ));
+    scope = scope.add_finding(Finding::new(
+        Tone::Info,
+        format!(
+            "Freigegebene Kurzbefehle: {}",
+            list_or_dash(&rep.shortcuts_allow)
+        ),
+    ));
+    report = report.add_group(scope);
+
+    let mut never = FindingGroup::new("Nie");
+    for n in &rep.never {
+        never = never.add_finding(Finding::new(Tone::Info, *n));
+    }
+    report = report.add_group(never);
+
+    print!("{}", report.render(console));
+}
+
+fn list_or_dash(items: &[String]) -> String {
+    if items.is_empty() {
+        "—".to_string()
+    } else {
+        items.join(", ")
+    }
 }
 
 pub fn render_apply_report(rep: &ApplyReport, color: ColorMode) {
