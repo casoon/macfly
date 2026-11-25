@@ -5,18 +5,24 @@ order: 2
 ---
 
 MacFly never mutates your Apple Notes or Apple Mail directly from a single
-unverified command. Every write follows four explicit steps:
+unverified command. Every write is a plan with up to four steps — how many of
+them need you depends on the profile's [security preset](#security-presets).
 
-1. **Create:** `macfly plan create --input plan.json` (or `--stdin`) validates
-   all operations against your profile scopes, computes a canonical SHA-256
-   `plan_hash` and 6-character `approval_code`, sets a TTL (default 15 minutes),
-   and writes the plan to `~/.local/share/macfly/plans/` (`0600`).
-2. **Inspect:** `macfly plan inspect <plan-id>` displays risk level,
+1. **Create:** `macfly plan create --input plan.json` (or `--stdin`, or
+   `plan_create` over MCP) validates all operations against your profile scopes,
+   computes a canonical SHA-256 `plan_hash`, sets a TTL (default 15 minutes),
+   and writes the plan to `~/.local/share/macfly/plans/` (`0600`). If the preset
+   allows every operation, the plan is created as `approved`
+   (`approved_by: "preset:balanced"`); otherwise it waits as `pending_approval`.
+2. **Inspect:** `macfly plan inspect <plan-id>` displays status, risk level,
    reversibility, hash, and **full-content previews** (complete Apple Mail draft
    bodies, line-by-line Apple Notes additions, and high-risk Shortcut warnings).
-3. **Approve:** `macfly plan approve <plan-id>` always requires an interactive
-   TTY (even when `--confirm-code` is passed) and confirming the 6-character code.
-4. **Apply (with lock & `--resume`):** `macfly plan apply <plan-id>` acquires an
+3. **Approve (only for `pending_approval`):** `macfly plan approve <plan-id>`
+   requires an interactive terminal, shows the full preview and asks you to type
+   a random 6-character code that is only shown there — never in plan output,
+   JSON or MCP responses.
+4. **Apply (with lock & `--resume`):** `macfly plan apply <plan-id>` (or
+   `plan_apply` over MCP) runs only approved plans. It acquires an
    exclusive `.lock` file against duplicate runs, re-verifies plan integrity and
    optional note revisions, executes operations sequentially while persisting
    progress after each step, and appends a record to
@@ -24,6 +30,32 @@ unverified command. Every write follows four explicit steps:
    stops mid-way, it is marked `partially_applied` and can be continued cleanly
    with `macfly plan apply <plan-id> --resume` (note: Apple app mutations are
    resumable, not full atomic rollbacks).
+
+## Security Presets
+
+Each profile has a `preset` that decides which plans run without asking you.
+`macfly config init` asks once; without a config, `balanced` applies.
+`macfly policy` explains the active rules in plain language.
+
+| Preset | Runs automatically | Needs your approval |
+|---|---|---|
+| `strict` | nothing | every change |
+| `balanced` (default) | `notes_create`, `notes_create_folder`, `mail_create_draft`, `mail_mark_read`, `reminders_create` — up to 5 operations per plan | `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move`, `shortcuts_run`, and any plan with more than 5 operations |
+| `open` | additionally `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move` — in any number | `shortcuts_run` |
+
+In every preset, scope rules (`deny_folders`, `deny_mailboxes`, allowlists) and
+DLP redaction apply, mails are only ever saved as drafts, and every applied plan
+is journaled. `--no-redact` only works in an interactive terminal.
+
+```json
+{
+  "default_profile": "default",
+  "profiles": {
+    "default": { "preset": "balanced" },
+    "mcp": { "preset": "strict" }
+  }
+}
+```
 
 ## Supported Operations
 

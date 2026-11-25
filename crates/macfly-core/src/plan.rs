@@ -1,11 +1,11 @@
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{ProfileConfig, data_dir};
+use crate::config::{Preset, ProfileConfig, data_dir};
 use crate::error::MacflyError;
 use crate::model::compute_sha256_hex;
 
@@ -146,15 +146,65 @@ pub struct StoredPlan {
     pub risk_level: RiskLevel,
     pub reversibility: Reversibility,
     pub plan_hash: String,
+    /// Zufälliger Prüfcode für die menschliche Freigabe. Wird nie an Agenten ausgegeben (siehe `for_output`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub approval_code: String,
     #[serde(default)]
     pub approved_at_unix: Option<u64>,
+    /// Wer freigegeben hat: `human` oder `preset:<name>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_by: Option<String>,
     #[serde(default)]
     pub applied_at_unix: Option<u64>,
     pub operations: Vec<PlanOperation>,
     pub preview_lines: Vec<String>,
     #[serde(default)]
     pub completed_ops: Vec<OperationRecord>,
+}
+
+impl StoredPlan {
+    /// Kopie für Ausgaben an Terminal, JSON oder MCP — ohne Prüfcode.
+    pub fn for_output(&self) -> Self {
+        Self {
+            approval_code: String::new(),
+            ..self.clone()
+        }
+    }
+}
+
+/// Aktionen mit ihrer Risikostufe — Grundlage für `macfly policy` und die Voreinstellungen.
+pub const ACTION_RISKS: &[(&str, RiskLevel)] = &[
+    ("notes_create", RiskLevel::Low),
+    ("notes_create_folder", RiskLevel::Low),
+    ("mail_create_draft", RiskLevel::Low),
+    ("mail_mark_read", RiskLevel::Low),
+    ("reminders_create", RiskLevel::Low),
+    ("notes_append", RiskLevel::Medium),
+    ("notes_move", RiskLevel::Medium),
+    ("notes_move_folder_contents", RiskLevel::Medium),
+    ("notes_delete_empty_folder", RiskLevel::Medium),
+    ("mail_move", RiskLevel::Medium),
+    ("shortcuts_run", RiskLevel::High),
+];
+
+/// Ob eine einzelne Aktion dieser Risikostufe unter der Voreinstellung automatisch laufen darf.
+pub fn preset_allows(preset: Preset, risk: RiskLevel) -> bool {
+    match preset {
+        Preset::Strict => false,
+        Preset::Balanced => risk == RiskLevel::Low,
+        Preset::Open => risk <= RiskLevel::Medium,
+    }
+}
+
+/// Ob ein ganzer Plan unter der Voreinstellung ohne menschliche Freigabe laufen darf.
+/// `balanced` nutzt das Plan-Risiko (mehr als 5 Operationen gelten als hoch),
+/// `open` prüft nur die einzelnen Operationen.
+pub fn preset_auto_approves(preset: Preset, plan_risk: RiskLevel, ops: &[PlanOperation]) -> bool {
+    match preset {
+        Preset::Strict => false,
+        Preset::Balanced => preset_allows(preset, plan_risk),
+        Preset::Open => ops.iter().all(|o| preset_allows(preset, o.risk_level())),
+    }
 }
 
 /// Exklusiver Dateilock gegen parallele oder doppelte Ausführung desselben Plans.
@@ -558,7 +608,7 @@ impl PlanStore {
         let hash_input = format!("{profile_name}\n{canonical_ops}");
         let full_hash = compute_sha256_hex(&hash_input);
         let plan_hash = format!("sha256:{full_hash}");
-        let approval_code = full_hash[..6].to_ascii_uppercase();
+        let approval_code = random_approval_code()?;
         let plan_id = format!("plan-{now}-{}", &full_hash[..8]);
 
         let mut risk_level = proposal
@@ -587,11 +637,16 @@ impl PlanStore {
             Reversibility::Reversible
         };
 
-        let preview_lines: Vec<String> =
-            proposal.operations.iter().map(PlanOperation::preview).collect();
+        let preview_lines: Vec<String> = proposal
+            .operations
+            .iter()
+            .map(PlanOperation::preview)
+            .collect();
         let summary = proposal
             .summary
             .unwrap_or_else(|| format!("{} Operation(en)", proposal.operations.len()));
+
+        let auto_approved = preset_auto_approves(profile.preset, risk_level, &proposal.operations);
 
         let plan = StoredPlan {
             schema_version: "1.0".to_string(),
@@ -600,12 +655,17 @@ impl PlanStore {
             summary,
             created_at_unix: now,
             expires_at_unix: now + ttl_secs,
-            status: PlanStatus::PendingApproval,
+            status: if auto_approved {
+                PlanStatus::Approved
+            } else {
+                PlanStatus::PendingApproval
+            },
             risk_level,
             reversibility,
             plan_hash,
             approval_code,
-            approved_at_unix: None,
+            approved_at_unix: auto_approved.then_some(now),
+            approved_by: auto_approved.then(|| format!("preset:{}", profile.preset.name())),
             applied_at_unix: None,
             operations: proposal.operations,
             preview_lines,
@@ -664,14 +724,17 @@ impl PlanStore {
                 plan.status
             )));
         }
-        if !confirm_code.trim().eq_ignore_ascii_case(&plan.approval_code) {
-            return Err(MacflyError::ApprovalError(format!(
-                "Ungültiger Bestätigungscode (erwartet: {})",
-                plan.approval_code
-            )));
+        if !confirm_code
+            .trim()
+            .eq_ignore_ascii_case(&plan.approval_code)
+        {
+            return Err(MacflyError::ApprovalError(
+                "Ungültiger Bestätigungscode".to_string(),
+            ));
         }
         plan.status = PlanStatus::Approved;
         plan.approved_at_unix = Some(now);
+        plan.approved_by = Some("human".to_string());
         self.save(&plan)?;
         Ok(plan)
     }
@@ -729,6 +792,13 @@ pub fn verify_plan_integrity(plan: &StoredPlan) -> Result<(), MacflyError> {
         )));
     }
     Ok(())
+}
+
+/// 6-stelliger Prüfcode aus `/dev/urandom` — nicht aus dem Plan-Hash ableitbar.
+fn random_approval_code() -> Result<String, MacflyError> {
+    let mut buf = [0u8; 3];
+    fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    Ok(buf.iter().map(|b| format!("{b:02X}")).collect())
 }
 
 pub fn now_unix() -> u64 {
@@ -790,19 +860,139 @@ mod tests {
         let plan = store.create("default", &profile, proposal, 600).unwrap();
         assert_eq!(plan.status, PlanStatus::PendingApproval);
         assert_eq!(plan.risk_level, RiskLevel::Medium);
+        assert_eq!(plan.approval_code.len(), 6);
+        assert!(
+            !plan
+                .plan_hash
+                .to_ascii_uppercase()
+                .contains(&plan.approval_code)
+        );
+        assert!(
+            !serde_json::to_string(&plan.for_output())
+                .unwrap()
+                .contains("approval_code")
+        );
 
         // Falscher Code wird abgewiesen
         assert!(store.approve(&plan.plan_id, "000000").is_err());
 
         // Richtiger Code gibt frei
+        let wrong = store
+            .approve(&plan.plan_id, "000000")
+            .unwrap_err()
+            .to_string();
+        assert!(!wrong.contains(&plan.approval_code));
         let approved = store.approve(&plan.plan_id, &plan.approval_code).unwrap();
         assert_eq!(approved.status, PlanStatus::Approved);
+        assert_eq!(approved.approved_by.as_deref(), Some("human"));
 
         // Manipulation der gespeicherten Datei wird erkannt
         let path = store.plan_path(&plan.plan_id).unwrap();
-        let raw = fs::read_to_string(&path).unwrap().replace("Archiv", "Manipuliert");
+        let raw = fs::read_to_string(&path)
+            .unwrap()
+            .replace("Archiv", "Manipuliert");
         fs::write(&path, raw).unwrap();
         assert!(store.load(&plan.plan_id).is_err());
+    }
+
+    fn create_folder_op(name: &str) -> PlanOperation {
+        PlanOperation::NotesCreateFolder {
+            account: None,
+            name: name.to_string(),
+            parent_folder: None,
+        }
+    }
+
+    fn move_op() -> PlanOperation {
+        PlanOperation::NotesMove {
+            note_id: "x-coredata://1".to_string(),
+            expected_revision: None,
+            destination_folder: "Archiv".to_string(),
+            destination_account: None,
+        }
+    }
+
+    fn create_with(preset: Preset, ops: Vec<PlanOperation>) -> StoredPlan {
+        let store = temp_store(&format!("preset-{}-{}", preset.name(), ops.len()));
+        let profile = ProfileConfig {
+            preset,
+            ..ProfileConfig::default()
+        };
+        let proposal = PlanProposal {
+            schema_version: "1.0".to_string(),
+            summary: None,
+            operations: ops,
+        };
+        store.create("default", &profile, proposal, 600).unwrap()
+    }
+
+    #[test]
+    fn presets_decide_auto_approval() {
+        // strict: nichts automatisch
+        let p = create_with(Preset::Strict, vec![create_folder_op("A")]);
+        assert_eq!(p.status, PlanStatus::PendingApproval);
+        assert_eq!(p.approved_by, None);
+
+        // balanced: risikoarme Anlege-Aktion automatisch …
+        let p = create_with(Preset::Balanced, vec![create_folder_op("A")]);
+        assert_eq!(p.status, PlanStatus::Approved);
+        assert_eq!(p.approved_by.as_deref(), Some("preset:balanced"));
+        // … Verschieben nicht …
+        let p = create_with(Preset::Balanced, vec![move_op()]);
+        assert_eq!(p.status, PlanStatus::PendingApproval);
+        // … und mehr als 5 Operationen auch nicht
+        let many = (0..6).map(|i| create_folder_op(&format!("F{i}"))).collect();
+        let p = create_with(Preset::Balanced, many);
+        assert_eq!(p.status, PlanStatus::PendingApproval);
+
+        // open: Verschieben automatisch, auch in großen Mengen
+        let many_moves = (0..8).map(|_| move_op()).collect();
+        let p = create_with(Preset::Open, many_moves);
+        assert_eq!(p.status, PlanStatus::Approved);
+        assert_eq!(p.approved_by.as_deref(), Some("preset:open"));
+    }
+
+    #[test]
+    fn open_preset_still_requires_approval_for_shortcuts() {
+        let store = temp_store("open-shortcuts");
+        let mut profile = ProfileConfig {
+            preset: Preset::Open,
+            ..ProfileConfig::default()
+        };
+        profile.shortcuts.allow.push("Office Focus".to_string());
+        let proposal = PlanProposal {
+            schema_version: "1.0".to_string(),
+            summary: None,
+            operations: vec![PlanOperation::ShortcutsRun {
+                name: "Office Focus".to_string(),
+                input: None,
+            }],
+        };
+        let p = store.create("default", &profile, proposal, 600).unwrap();
+        assert_eq!(p.status, PlanStatus::PendingApproval);
+    }
+
+    #[test]
+    fn action_risk_catalog_matches_operations() {
+        let samples = vec![
+            create_folder_op("A"),
+            move_op(),
+            PlanOperation::ShortcutsRun {
+                name: "X".to_string(),
+                input: None,
+            },
+        ];
+        for op in samples {
+            let action = serde_json::to_value(&op).unwrap()["action"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let (_, risk) = ACTION_RISKS
+                .iter()
+                .find(|(name, _)| *name == action)
+                .expect("action in catalog");
+            assert_eq!(*risk, op.risk_level());
+        }
     }
 
     #[test]
@@ -819,7 +1009,9 @@ mod tests {
                 destination_account: None,
             }],
         };
-        let err = store.create("default", &profile, proposal, 600).unwrap_err();
+        let err = store
+            .create("default", &profile, proposal, 600)
+            .unwrap_err();
         assert_eq!(err.code(), "SCOPE_DENIED");
     }
 

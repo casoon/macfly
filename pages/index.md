@@ -24,7 +24,8 @@ agents (or shell workflows) and your personal macOS data:
 2. **Security on both sides (Read & Write):** Most automation tools only
    guard writes (if at all). MacFly protects *reads* via profile scopes and
    automatic DLP redaction, and *writes* via tamper-evident SHA-256 plans and
-   interactive approval.
+   a security preset (`strict` / `balanced` / `open`) that decides which
+   low-risk changes run automatically and which need your approval.
 3. **Single Point of Truth:** One central `~/.config/macfly/config.json` for
    scopes and DLP rules. Email accounts stay in Apple Mail, and email
    signatures are read straight from Apple Mail instead of being duplicated.

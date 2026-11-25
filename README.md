@@ -6,6 +6,8 @@ MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI 
 
 > *Your AI knows what to do. MacFly controls what it can do.*
 
+**macOS only** — MacFly runs on Macs (Apple Silicon or Intel) and drives the Apple apps through macOS Automation. There is no Windows, Linux or iOS version.
+
 **Website:** [casoon.github.io/macfly](https://casoon.github.io/macfly/) · [Use Cases & Prompts](https://casoon.github.io/macfly/demo/) · [Changelog](https://casoon.github.io/macfly/changelog/)
 
 ![MacFly terminal demo: macfly doctor, notes audit, and 360° person dossier](./assets/casts/hero.svg)
@@ -20,9 +22,10 @@ MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI 
 - **Apple Shortcuts** — allowlist-gated bridge to `shortcuts list` and `shortcuts run` (Focus modes, HomeKit scenes, modern App Intents)
 - **Cross-app Context Packs & Typst/PDF Dossiers** — `context daily-brief`, `context person "<Name/Email>"` (360° dossier across 5 apps), `context meeting-prep [--create-note]`, `context weekly-review`, plus `macfly report` for Typst (`.typ` / `renderreport`), Markdown (`.md`), or PDF (`.pdf`) dossiers
 - **Agent Skill Exporter & `launchd` Scheduler** — `macfly skill export` generates a ready-to-use `SKILL.md` for Claude Code, Codex, Cursor, or Antigravity; `macfly schedule` manages native macOS `LaunchAgents` without a custom background daemon
-- **Read-side Data Firewall (DLP)** — profile-based allowlists/denylists (`deny_folders`, `deny_mailboxes`) plus automatic linear-time regex redaction of private keys, API keys, IBANs, credit cards, and 6-digit OTP codes before output reaches any LLM
-- **Transactional change plans & `runemark` terminal UI** — every write goes through `plan create → inspect → approve → apply` with canonical SHA-256 plan hashing, tamper detection, expiry TTL, interactive TTY confirmation, a local JSONL audit journal, and semantic terminal reports powered by [`runemark`](https://casoon.github.io/runemark/)
-- **Built-in `stdio` MCP server** — exposes 19 read, context-pack & `plan_create`/`plan_inspect` tools; `plan_approve` and `plan_apply` are intentionally excluded from MCP so agents can propose changes but never self-approve them
+- **Read-side Data Firewall (DLP)** — profile-based allowlists/denylists (`deny_folders`, `deny_mailboxes`) plus automatic linear-time regex redaction of private keys, API keys, IBANs, Luhn-valid card numbers, 6-digit OTP codes, and passwords after keywords like `Passwort:` before output reaches any LLM
+- **Security presets** — pick `strict`, `balanced` (default) or `open` once instead of writing rules: `balanced` lets low-risk creates (notes, folders, mail drafts, reminders) run automatically and asks you for moves, appends, deletes and Shortcuts; `macfly policy` explains the active rules in plain language
+- **Transactional change plans & `runemark` terminal UI** — every write goes through `plan create → inspect → approve → apply` with canonical SHA-256 plan hashing, tamper detection, expiry TTL, interactive approval for everything the preset doesn't cover, a local JSONL audit journal, and semantic terminal reports powered by [`runemark`](https://casoon.github.io/runemark/)
+- **Built-in `stdio` MCP server** — exposes 20 read, context-pack & plan tools (`plan_create`, `plan_inspect`, `plan_apply` for already-approved plans); `plan_approve` is intentionally excluded from MCP so agents can propose changes but never approve them
 
 ## Why Rust + AppleScript/JXA
 
@@ -46,7 +49,16 @@ curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bas
 cargo install macfly
 
 macfly doctor
-macfly config init
+macfly config init   # asks for the security preset (strict / balanced / open)
+```
+
+Official binaries come only from the GitHub releases of `casoon/macfly` — built
+there by the release workflow, never on a developer machine. To verify a
+download by hand, check the hash and the signed build provenance:
+
+```sh
+shasum -a 256 -c SHA256SUMS --ignore-missing
+gh attestation verify macfly-aarch64-apple-darwin.tar.gz --repo casoon/macfly
 ```
 
 Everyday commands (all support `--format pretty`, `--format json`, and `--format agent`, plus `--color auto|always|never`):
@@ -108,12 +120,15 @@ See [Getting Started](https://casoon.github.io/macfly/docs/guide/getting-started
 ## Plans & audit journal
 
 ```sh
-macfly plan create --input plan.json
+macfly policy                         # what the active preset allows
+macfly plan create --input plan.json  # auto-approved or pending, depending on the preset
 macfly plan inspect <plan-id>
-macfly plan approve <plan-id>
+macfly plan approve <plan-id>         # only for pending plans, interactive terminal
 macfly plan apply <plan-id>
 macfly history
 ```
+
+Set the preset per profile in `config.json` (`"preset": "strict" | "balanced" | "open"`); `macfly config init` asks once. With shell-capable agents (Claude Code, Codex), presets are guardrails, not a sandbox — see the [Security Model](https://casoon.github.io/macfly/docs/architecture/security-model/#honest-system-boundary).
 
 Plans are stored at `~/.local/share/macfly/plans/` (`0600`) and executions are logged to `~/.local/share/macfly/journal.jsonl` (`0600`). See [Plans & Workflows](https://casoon.github.io/macfly/docs/guide/plans-and-workflows/) for all supported operations.
 

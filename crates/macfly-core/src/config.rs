@@ -19,8 +19,55 @@ pub struct Config {
     pub profiles: BTreeMap<String, ProfileConfig>,
 }
 
+/// Vorkonfigurierte Sicherheitsstufe: legt fest, welche Änderungspläne ohne menschliche Freigabe laufen.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Preset {
+    /// Jede Änderung braucht eine menschliche Freigabe.
+    Strict,
+    /// Risikoarme Anlege-Aktionen (bis 5 Operationen) laufen automatisch.
+    #[default]
+    Balanced,
+    /// Zusätzlich Verschieben, Anhängen und Löschen leerer Ordner automatisch.
+    Open,
+}
+
+impl Preset {
+    pub const ALL: [Preset; 3] = [Preset::Strict, Preset::Balanced, Preset::Open];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Strict => "strict",
+            Self::Balanced => "balanced",
+            Self::Open => "open",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|p| p.name().eq_ignore_ascii_case(name.trim()))
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Strict => {
+                "Jede Änderung braucht deine Freigabe im Terminal. Für sensible Postfächer und Firmenrechner."
+            }
+            Self::Balanced => {
+                "Notizen, Ordner, Mail-Entwürfe und Erinnerungen anlegen läuft automatisch (bis 5 Operationen). Verschieben, Anhängen, Löschen und Kurzbefehle brauchen deine Freigabe."
+            }
+            Self::Open => {
+                "Zusätzlich Verschieben, Anhängen und Löschen leerer Ordner automatisch. Für Aufräum- und Migrations-Sessions. Kurzbefehle brauchen weiter deine Freigabe."
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileConfig {
+    #[serde(default)]
+    pub preset: Preset,
     #[serde(default)]
     pub notes: NotesScopeConfig,
     #[serde(default)]
@@ -115,6 +162,7 @@ impl Default for DlpConfig {
 impl Default for ProfileConfig {
     fn default() -> Self {
         Self {
+            preset: Preset::default(),
             notes: NotesScopeConfig {
                 allow_accounts: Vec::new(),
                 allow_folders: Vec::new(),
@@ -151,9 +199,7 @@ impl Config {
     }
 
     pub fn load_or_default(path: Option<&Path>) -> Result<(Self, PathBuf, bool), MacflyError> {
-        let cfg_path = path
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::default_path);
+        let cfg_path = path.map(PathBuf::from).unwrap_or_else(Self::default_path);
         if !cfg_path.exists() {
             return Ok((Self::default(), cfg_path, false));
         }
@@ -168,10 +214,12 @@ impl Config {
         Ok((parsed, cfg_path, true))
     }
 
-    pub fn write_default(path: Option<&Path>, force: bool) -> Result<PathBuf, MacflyError> {
-        let cfg_path = path
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::default_path);
+    pub fn write_default(
+        path: Option<&Path>,
+        force: bool,
+        preset: Preset,
+    ) -> Result<PathBuf, MacflyError> {
+        let cfg_path = path.map(PathBuf::from).unwrap_or_else(Self::default_path);
         if cfg_path.exists() && !force {
             return Err(MacflyError::ConfigError {
                 path: cfg_path.display().to_string(),
@@ -181,7 +229,11 @@ impl Config {
         if let Some(parent) = cfg_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(&Self::default())?;
+        let mut cfg = Self::default();
+        for profile in cfg.profiles.values_mut() {
+            profile.preset = preset;
+        }
+        let json = serde_json::to_string_pretty(&cfg)?;
         fs::write(&cfg_path, format!("{json}\n"))?;
         Ok(cfg_path)
     }
@@ -289,6 +341,7 @@ fn default_dlp_rules() -> Vec<String> {
         "iban".to_string(),
         "credit_card".to_string(),
         "otp_code".to_string(),
+        "password".to_string(),
     ]
 }
 

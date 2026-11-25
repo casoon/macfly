@@ -380,3 +380,23 @@ impl MailAdapter {
         Ok(res.detail)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `whose` filters make Apple Mail scan a whole mailbox per call (minutes on
+    /// mailboxes with tens of thousands of messages); mail scripts address
+    /// messages by id instead.
+    #[test]
+    fn mail_scripts_do_not_scan_mailboxes_with_whose() {
+        for (name, script) in [
+            ("mail_list.js", SCRIPT_LIST),
+            ("mail_read.js", SCRIPT_READ),
+            ("mail_mutate.js", SCRIPT_MUTATE),
+        ] {
+            assert!(!script.contains(".whose("), "{name} uses .whose(");
+            assert!(!script.contains("messages["), "{name} indexes messages");
+        }
+    }
+}

@@ -22,6 +22,24 @@ import { url } from '@casoon/pages-theme/url';
 import config from 'virtual:casoon-pages/config';
 import { castDemo } from '../casts';
 
+type Cell = boolean | string;
+const capabilityColumns = [
+  { key: 'read', label: 'Read & search' },
+  { key: 'export', label: 'Export to Markdown' },
+  { key: 'import', label: 'Import' },
+  { key: 'change', label: 'Change via plan' },
+  { key: 'auto', label: 'Runs without asking' },
+] as const;
+const capabilities: { app: string; note: string; cells: Record<(typeof capabilityColumns)[number]['key'], Cell> }[] = [
+  { app: 'Notes', note: 'Folders, audit, Fidelity Guard', cells: { read: 'search · audit', export: true, import: '.md .html .json .csv', change: 'create · append · move · folders', auto: 'new notes & folders' } },
+  { app: 'Mail', note: 'Every account in Apple Mail', cells: { read: 'DLP-redacted', export: true, import: false, change: 'drafts · mark read · move', auto: 'drafts & mark read' } },
+  { app: 'Contacts', note: 'Batched search', cells: { read: 'search · audit', export: true, import: false, change: false, auto: false } },
+  { app: 'Calendar', note: 'Upcoming events', cells: { read: 'next N days', export: true, import: false, change: false, auto: false } },
+  { app: 'Reminders', note: 'Lists & due dates', cells: { read: 'open · overdue', export: true, import: '.md .json .csv', change: 'create', auto: 'new reminders' } },
+  { app: 'Safari', note: 'Open tabs', cells: { read: 'open tabs', export: true, import: false, change: 'tabs → note', auto: 'tabs → note' } },
+  { app: 'Shortcuts', note: 'Allowlist only', cells: { read: 'list', export: false, import: false, change: 'run allowlisted', auto: false } },
+];
+
 const latestRelease = config.changelog
   ? parseChangelog(await readFile(config.changelog, 'utf8')).find(
       (r) => r.version.toLowerCase() !== 'unreleased'
@@ -97,13 +115,14 @@ const quickstartCode = `# 1. Install (no Cargo needed) & verify macOS access
 curl -fsSL https://raw.githubusercontent.com/casoon/macfly/main/install.sh | bash
 # or: cargo install macfly
 macfly doctor
-macfly config init
+macfly config init   # pick a security preset: strict · balanced · open
+macfly policy        # what your AI may do, in plain language
 
 # 2. Connect your AI client (MCP or Agent SKILL.md)
 claude mcp add macfly -- macfly mcp --profile default
 macfly skill export --output ./.claude/skills/macfly
 
-# 3. Review & approve any change your AI proposes
+# 3. Low-risk changes run under your preset — review & approve the rest
 macfly plan list
 macfly plan inspect <plan-id>
 macfly plan approve <plan-id>
@@ -131,7 +150,8 @@ macfly plan apply <plan-id>`;
     <Badges>
       <Badge>AI-first</Badge>
       <Badge>Local-first</Badge>
-      <Badge>Human-approved writes</Badge>
+      <Badge>macOS only</Badge>
+      <Badge>Preset-guarded writes</Badge>
       <Badge>Open Source · v{config.version}</Badge>
     </Badges>
     <Fragment
@@ -169,6 +189,69 @@ macfly plan apply <plan-id>`;
     </div>
   </section>
 
+  <!-- 2b. Capability matrix -->
+  <section class="capabilities" aria-labelledby="capabilities-heading">
+    <p class="eyebrow">What MacFly does</p>
+    <h2 id="capabilities-heading">Seven Apple apps, one controlled layer</h2>
+    <p class="section-lead">
+      What your AI can do in each app at a glance. Every change goes through a plan; the last
+      column shows what the default <code>balanced</code> preset lets through without asking you.
+      Mail is never sent, only drafted.
+    </p>
+    <div class="cap-wrap">
+      <table class="cap-table">
+        <caption class="sr-only">MacFly capabilities per Apple app</caption>
+        <thead>
+          <tr>
+            <th scope="col">App</th>
+            {capabilityColumns.map((c) => <th scope="col">{c.label}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {
+            capabilities.map((row) => (
+              <tr>
+                <th scope="row">
+                  <span class="cap-app">{row.app}</span>
+                  <span class="cap-note">{row.note}</span>
+                </th>
+                {capabilityColumns.map((c) => {
+                  const cell = row.cells[c.key];
+                  return (
+                    <td data-label={c.label} class={cell ? 'yes' : 'no'}>
+                      {cell ? (
+                        <span class="cap-cell">
+                          <svg class="cap-icon" viewBox="0 0 20 20" aria-hidden="true">
+                            <circle cx="10" cy="10" r="9" />
+                            <path d="M6 10.5l2.6 2.6L14 7.6" />
+                          </svg>
+                          <span class="sr-only">Yes</span>
+                          {typeof cell === 'string' && <span class="cap-detail">{cell}</span>}
+                        </span>
+                      ) : (
+                        <span class="cap-cell">
+                          <span class="cap-dash" aria-hidden="true">—</span>
+                          <span class="sr-only">No</span>
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="mac-only">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5" /><path d="M7 16.5h6M10 13.5v3" /></svg>
+      <span>
+        <strong>macOS only.</strong> MacFly runs on Macs with Apple Silicon or Intel and drives the
+        Apple apps through macOS Automation. There is no Windows, Linux or iOS version.
+      </span>
+    </p>
+  </section>
+
   <!-- 3. Controlled AI Access Layer -->
   <Flow
     eyebrow="Controlled AI Access Layer"
@@ -183,15 +266,15 @@ macfly plan apply <plan-id>`;
       },
       {
         label: '2 · Plan',
-        artifact: '19 MCP tools / CLI',
+        artifact: '20 MCP tools / CLI',
         title: 'Your AI proposes steps',
         body: 'Claude, Codex, Cursor, or Ollama reads DLP-filtered context and submits a typed change plan.',
       },
       {
         label: '3 · Control',
-        artifact: 'Diff + TTY approval',
+        artifact: 'Preset + diff approval',
         title: 'MacFly checks & asks you',
-        body: 'Policy denylists, full-content draft/note diffs, risk levels, and mandatory interactive TTY approval.',
+        body: 'Policy denylists, full-content draft/note diffs and risk levels. Your security preset lets low-risk creates through and asks you for everything else.',
       },
       {
         label: '4 · Execute',
@@ -243,8 +326,8 @@ macfly plan apply <plan-id>`;
   <Facts
     items={[
       { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
-      { value: '19 MCP tools', label: 'read, 360° context packs & plan creation only — over MCP, agents cannot approve or apply writes' },
-      { value: '0 blind writes', label: 'full-content diff preview, strict interactive TTY approval, execution lock, and resumable plans' },
+      { value: '20 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
+      { value: '3 presets', label: 'strict, balanced or open — one choice instead of a rulebook, explained by `macfly policy`' },
       { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}
   />
@@ -253,12 +336,12 @@ macfly plan apply <plan-id>`;
     heading="Technical architecture under the hood"
     items={[
       {
-        title: 'Strict separation of proposal and execution',
-        body: 'MCP exposes read tools, cross-app context packs, and `plan_create` — never `plan_approve` or `plan_apply`. Even under indirect prompt injection, an agent cannot self-approve changes.',
+        title: 'Agents propose, your preset decides',
+        body: 'MCP exposes read tools, cross-app context packs, `plan_create` and `plan_apply` for already-approved plans — never `plan_approve`. Which plans run automatically is set by your preset (`strict`, `balanced`, `open`), not by the agent, even under indirect prompt injection.',
       },
       {
         title: 'Read-side Data Firewall (DLP) & profile denylists',
-        body: 'Exclude sensitive folders (`Passwords`, `Health`) and mailboxes by policy, redact IBANs, API keys, private keys, credit cards, and OTPs in Rust, and tag external emails as `untrusted_external`.',
+        body: 'Exclude sensitive folders (`Passwords`, `Health`) and mailboxes by policy, redact IBANs, API keys, private keys, card numbers, OTPs and passwords in Rust, and tag external emails as `untrusted_external`.',
       },
       {
         title: 'Full-content diff previews, locks & resume',
@@ -281,7 +364,7 @@ macfly plan apply <plan-id>`;
 
   <Compare
     title="Next to cloud OAuth connectors"
-    lead="Routing AI access through local macOS apps and a Rust policy corridor keeps credentials on-device and puts human approval before every write."
+    lead="Routing AI access through local macOS apps and a Rust policy corridor keeps credentials on-device and puts your approval before every risky write."
     columns={[
       { title: 'Cloud OAuth Connectors', label: 'Direct provider integration' },
       { title: 'MacFly Access Layer', label: 'Local-first on macOS', badge: 'Controlled AI' },
@@ -306,7 +389,7 @@ macfly plan apply <plan-id>`;
         topic: 'Write & send safety',
         cells: [
           'Broad OAuth scopes (`Mail.Send`) exposed to indirect prompt injection.',
-          '**Drafts by default**, full-content diff preview, strict interactive TTY approval, and MCP read + plan-only.',
+          '**Drafts only, never sent**, full-content diff preview, security presets with interactive approval for risky changes, and no plan approval over MCP.',
         ],
       },
       {
@@ -328,7 +411,7 @@ macfly plan apply <plan-id>`;
       'Install via the direct shell installer (no Cargo) or <code>cargo install macfly</code>',
       'Verify macOS permissions &amp; create your policy config: <code>macfly doctor</code> · <code>macfly config init</code>',
       'Connect Claude Code, Claude Desktop, Cursor, or Ollama via <code>macfly mcp</code> or <code>macfly skill export</code>',
-      'Ask your AI to audit notes, prepare a briefing, or draft replies — then review &amp; approve the plan in your terminal',
+      'Ask your AI to audit notes, prepare a briefing, or draft replies — low-risk plans run under your preset, the rest you approve in your terminal',
     ]}
   >
     <CodeBlock title="Install, connect AI & approve plans" lang="bash" code={quickstartCode} />
@@ -345,6 +428,7 @@ macfly plan apply <plan-id>`;
 
 <style>
   .prompts,
+  .capabilities,
   .ai-setup {
     max-width: var(--max);
     margin: 0 auto;
@@ -360,6 +444,7 @@ macfly plan apply <plan-id>`;
     text-transform: uppercase;
   }
   .prompts h2,
+  .capabilities h2,
   .ai-setup h2 {
     max-width: 24ch;
     margin: 0 0 14px;
@@ -419,6 +504,180 @@ macfly plan apply <plan-id>`;
     color: var(--muted);
     font-size: 14.5px;
     line-height: 1.6;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .cap-wrap {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .cap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .cap-table thead th {
+    padding: 14px 16px;
+    background: var(--bg-deep);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  .cap-table thead th:last-child,
+  .cap-table td:last-child {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  .cap-table tbody tr + tr > * {
+    border-top: 1px solid var(--border);
+  }
+  .cap-table tbody th,
+  .cap-table td {
+    padding: 14px 16px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .cap-app {
+    display: block;
+    color: var(--heading);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .cap-note {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .cap-cell {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .cap-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+  }
+  .cap-icon circle {
+    fill: color-mix(in srgb, var(--accent) 16%, transparent);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+  .cap-icon path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cap-detail {
+    color: var(--heading);
+    line-height: 1.45;
+  }
+  .cap-dash {
+    color: var(--muted);
+    padding-left: 5px;
+  }
+  .mac-only {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    max-width: 72ch;
+    margin: 22px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .mac-only svg {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin-top: 1px;
+    fill: none;
+    stroke: var(--heading);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+  .mac-only strong {
+    color: var(--heading);
+  }
+  @media (max-width: 760px) {
+    .cap-wrap {
+      border: 0;
+      background: none;
+      box-shadow: none;
+      overflow: visible;
+    }
+    .cap-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .cap-table,
+    .cap-table tbody,
+    .cap-table tr,
+    .cap-table th,
+    .cap-table td {
+      display: block;
+    }
+    .cap-table tbody tr {
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .cap-table tbody tr + tr > * {
+      border-top: 0;
+    }
+    .cap-table tbody th {
+      padding-bottom: 6px;
+    }
+    .cap-table td {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 9px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .cap-table td::before {
+      content: attr(data-label);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .cap-table td:last-child {
+      background: color-mix(in srgb, var(--accent) 7%, transparent);
+    }
+    .cap-table td::before {
+      flex: 0 0 auto;
+    }
+    .cap-cell {
+      display: block;
+      text-align: right;
+    }
+    .cap-icon {
+      display: inline-block;
+      margin: 0 6px 0 0;
+      vertical-align: -5px;
+    }
   }
   .prompt-links {
     display: flex;

@@ -13,11 +13,6 @@ function readInput() {
   const mailboxesOut = [];
   const signaturesOut = [];
 
-  let totalInboxUnread = 0;
-  try {
-    totalInboxUnread = Number(Mail.inbox.unreadCount() || 0);
-  } catch (_) {}
-
   const accNames = Mail.accounts.name() || [];
   const accIds = Mail.accounts.id() || [];
   let accEmails = [];
@@ -34,17 +29,20 @@ function readInput() {
       : [];
 
     let mbNames = [];
+    let mbUnread = [];
     try {
       mbNames = accObjs[i].mailboxes.name() || [];
+    } catch (_) {}
+    try {
+      mbUnread = accObjs[i].mailboxes.unreadCount() || [];
     } catch (_) {}
 
     for (let j = 0; j < mbNames.length; j++) {
       const name = String(mbNames[j]);
-      const isPrimaryInbox = i === 0 && name.toLowerCase() === "inbox";
       mailboxesOut.push({
         name: name,
         account: accName,
-        unread_count: isPrimaryInbox ? totalInboxUnread : 0,
+        unread_count: Number(mbUnread[j] || 0),
         message_count: 0,
       });
     }

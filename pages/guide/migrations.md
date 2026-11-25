@@ -11,7 +11,9 @@ Obsidian, DevMark, Notion, Evernote, Todoist, or CRM exports).
 
 Every **export** produces clean Markdown files with structured YAML frontmatter,
 and every **import** generates a tamper-evident **`macfly plan`** (SHA-256 hash +
-interactive TTY approval + audit journal) rather than writing blindly.
+approval + audit journal) rather than writing blindly. Imports with more than
+5 notes or reminders always need your approval unless the profile uses the
+`open` preset.
 
 ---
 
@@ -106,8 +108,8 @@ macfly notes import --input ./obsidian-vault --folder "00 · Inbox" --recursive
 macfly notes import --input ./notion-database.csv --folder "30 · Research"
 ```
 
-MacFly prints the generated `plan_id` and 6-character `approval_code`. Review
-and apply it interactively:
+MacFly prints the generated `plan_id` and its status. Review, approve
+(if `pending_approval`) and apply it:
 
 ```bash
 macfly plan inspect <plan-id>

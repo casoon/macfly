@@ -17,14 +17,16 @@ use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
-use macfly_core::config::{Config, data_dir};
+use macfly_core::config::{Config, Preset, data_dir};
 use macfly_core::error::MacflyError;
 use macfly_core::import::{
     is_supported_note_file, is_supported_reminder_file, parse_notes_from_str,
     parse_reminders_from_str,
 };
 use macfly_core::journal::AuditJournal;
-use macfly_core::plan::{PlanOperation, PlanProposal, PlanStore};
+use macfly_core::plan::{
+    ACTION_RISKS, PlanOperation, PlanProposal, PlanStore, StoredPlan, preset_allows,
+};
 use macfly_core::report_export::{
     daily_brief_to_typst, person_context_to_markdown, person_context_to_typst,
     weekly_review_to_typst,
@@ -156,12 +158,14 @@ enum Commands {
         #[command(subcommand)]
         action: ScheduleAction,
     },
+    /// Zeigt in Klartext, was das aktive Profil darf (Sicherheitsstufe, Freigaben, Sperren, DLP)
+    Policy,
     /// Audit-Journal ausgeführter Änderungspläne anzeigen
     History {
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
-    /// Startet den lokalen MCP-Server über stdio (Read + Plan-Create only)
+    /// Startet den lokalen MCP-Server über stdio (Read, Plan-Create/Inspect, Apply freigegebener Pläne)
     Mcp,
 }
 
@@ -171,6 +175,9 @@ enum ConfigAction {
     Init {
         #[arg(long)]
         force: bool,
+        /// Sicherheitsstufe: strict, balanced (Standard) oder open. Ohne Angabe wird im Terminal gefragt.
+        #[arg(long, value_parser = ["strict", "balanced", "open"])]
+        preset: Option<String>,
     },
     /// Zeigt den Pfad der aktiven Konfigurationsdatei
     Path,
@@ -422,14 +429,10 @@ enum PlanAction {
     },
     /// Listet gespeicherte Änderungspläne
     List,
-    /// Zeigt Details, Diff-Vorschau und Prüfcode eines Plans
+    /// Zeigt Details, Diff-Vorschau und Freigabestatus eines Plans
     Inspect { plan_id: String },
     /// Gibt einen Plan nach Prüfung frei (erfordert immer ein interaktives TTY)
-    Approve {
-        plan_id: String,
-        #[arg(long)]
-        confirm_code: Option<String>,
-    },
+    Approve { plan_id: String },
     /// Führt einen zuvor freigegebenen Plan aus und protokolliert im Audit-Journal
     Apply {
         plan_id: String,
@@ -538,6 +541,7 @@ struct DoctorReport {
     config_path: String,
     config_exists: bool,
     active_profile: String,
+    preset: &'static str,
     notes_access: String,
     notes_accounts_count: Option<usize>,
     notes_total_count: Option<usize>,
@@ -582,6 +586,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Report { action } => handle_report(cli, action),
         Commands::Skill { action } => handle_skill(cli, action),
         Commands::Schedule { action } => handle_schedule(cli, action),
+        Commands::Policy => handle_policy(cli),
         Commands::History { limit } => handle_history(cli, *limit),
         Commands::Mcp => {
             let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
@@ -589,6 +594,26 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
             mcp::run_mcp_server(&cfg, profile_name, profile)
         }
     }
+}
+
+/// Gibt einen Plan aus — nie mit Prüfcode, damit ein Agent ihn nicht weiterreichen kann.
+fn emit_plan(cli: &Cli, plan: &StoredPlan) -> Result<(), MacflyError> {
+    match cli.format {
+        OutputFormat::Pretty => ui::render_plan(plan, cli.color.into()),
+        _ => emit_json(cli.format, &plan.for_output())?,
+    }
+    Ok(())
+}
+
+/// `--no-redact` nur, wenn ein Mensch am Terminal sitzt — nicht in Pipes, Skripten oder Agenten-Aufrufen.
+fn ensure_redaction_bypass_allowed(no_redact: bool) -> Result<(), MacflyError> {
+    if no_redact && !io::stdin().is_terminal() {
+        return Err(MacflyError::ScopeDenied(
+            "`--no-redact` ist nur in einem interaktiven Terminal erlaubt (Schutz vor ungefilterter Weitergabe an KI-Modelle)."
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn emit_json<T: Serialize>(format: OutputFormat, val: &T) -> Result<(), MacflyError> {
@@ -603,13 +628,28 @@ fn emit_json<T: Serialize>(format: OutputFormat, val: &T) -> Result<(), MacflyEr
 
 fn handle_config(cli: &Cli, action: &ConfigAction) -> Result<(), MacflyError> {
     match action {
-        ConfigAction::Init { force } => {
-            let path = Config::write_default(cli.config.as_deref(), *force)?;
+        ConfigAction::Init { force, preset } => {
+            let preset = match preset {
+                Some(name) => Preset::parse(name).unwrap_or_default(),
+                None if matches!(cli.format, OutputFormat::Pretty) && io::stdin().is_terminal() => {
+                    ask_preset()?
+                }
+                None => Preset::default(),
+            };
+            let path = Config::write_default(cli.config.as_deref(), *force, preset)?;
             match cli.format {
-                OutputFormat::Pretty => println!("Config angelegt: {}", path.display()),
+                OutputFormat::Pretty => println!(
+                    "Config angelegt: {} (Sicherheitsstufe: {})\nDetails: macfly policy",
+                    path.display(),
+                    preset.name()
+                ),
                 _ => emit_json(
                     cli.format,
-                    &serde_json::json!({ "ok": true, "path": path.display().to_string() }),
+                    &serde_json::json!({
+                        "ok": true,
+                        "path": path.display().to_string(),
+                        "preset": preset.name()
+                    }),
                 )?,
             }
             Ok(())
@@ -640,6 +680,91 @@ fn handle_config(cli: &Cli, action: &ConfigAction) -> Result<(), MacflyError> {
     }
 }
 
+fn ask_preset() -> Result<Preset, MacflyError> {
+    println!(
+        "Welche Sicherheitsstufe soll gelten? (später änderbar über \"preset\" in der Config)\n"
+    );
+    for (i, p) in Preset::ALL.iter().enumerate() {
+        let marker = if *p == Preset::default() {
+            " (Standard)"
+        } else {
+            ""
+        };
+        println!(
+            "  {}) {}{}\n     {}\n",
+            i + 1,
+            p.name(),
+            marker,
+            p.description()
+        );
+    }
+    print!("Auswahl [2]: ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    let answer = answer.trim();
+    Ok(match answer {
+        "1" => Preset::Strict,
+        "3" => Preset::Open,
+        "" | "2" => Preset::Balanced,
+        other => Preset::parse(other).unwrap_or_default(),
+    })
+}
+
+#[derive(Serialize)]
+struct PolicyReport {
+    profile: String,
+    preset: &'static str,
+    preset_description: &'static str,
+    auto_approved_actions: Vec<&'static str>,
+    approval_required_actions: Vec<&'static str>,
+    max_auto_operations: Option<usize>,
+    notes_deny_folders: Vec<String>,
+    notes_allow_folders: Vec<String>,
+    mail_allow_accounts: Vec<String>,
+    mail_deny_mailboxes: Vec<String>,
+    shortcuts_allow: Vec<String>,
+    dlp_enabled: bool,
+    dlp_rules: Vec<String>,
+    unredacted_reads: &'static str,
+    never: Vec<&'static str>,
+}
+
+fn handle_policy(cli: &Cli) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+    let preset = profile.preset;
+    let (auto, manual): (Vec<_>, Vec<_>) = ACTION_RISKS
+        .iter()
+        .partition(|(_, risk)| preset_allows(preset, *risk));
+    let report = PolicyReport {
+        profile: profile_name.to_string(),
+        preset: preset.name(),
+        preset_description: preset.description(),
+        auto_approved_actions: auto.iter().map(|(a, _)| *a).collect(),
+        approval_required_actions: manual.iter().map(|(a, _)| *a).collect(),
+        max_auto_operations: (preset == Preset::Balanced).then_some(5),
+        notes_deny_folders: profile.notes.deny_folders.clone(),
+        notes_allow_folders: profile.notes.allow_folders.clone(),
+        mail_allow_accounts: profile.mail.allow_accounts.clone(),
+        mail_deny_mailboxes: profile.mail.deny_mailboxes.clone(),
+        shortcuts_allow: profile.shortcuts.allow.clone(),
+        dlp_enabled: profile.dlp.enabled,
+        dlp_rules: profile.dlp.redact.clone(),
+        unredacted_reads: "nur im interaktiven Terminal (--no-redact)",
+        never: vec![
+            "Mails senden (nur Entwürfe)",
+            "Pläne über MCP freigeben",
+            "gesperrte Ordner/Postfächer lesen oder ändern",
+        ],
+    };
+    match cli.format {
+        OutputFormat::Pretty => ui::render_policy(&report, cli.color.into()),
+        _ => emit_json(cli.format, &report)?,
+    }
+    Ok(())
+}
+
 fn handle_doctor(cli: &Cli) -> Result<(), MacflyError> {
     let (cfg, cfg_path, cfg_exists) = Config::load_or_default(cli.config.as_deref())?;
     let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
@@ -651,6 +776,12 @@ fn handle_doctor(cli: &Cli) -> Result<(), MacflyError> {
         .unwrap_or(false);
 
     let mut hints = Vec::new();
+    if profile.preset == Preset::Open {
+        hints.push(
+            "Sicherheitsstufe 'open': Verschieben, Anhängen und Löschen leerer Ordner laufen ohne Rückfrage. Für den Alltag 'balanced' empfohlen (macfly policy)."
+                .to_string(),
+        );
+    }
     let notes_adapter = NotesAdapter::new(cfg.script_timeout_secs);
     let (notes_access, notes_acc, notes_total) = match notes_adapter.overview(profile_name, profile)
     {
@@ -690,6 +821,7 @@ fn handle_doctor(cli: &Cli) -> Result<(), MacflyError> {
         config_path: cfg_path.display().to_string(),
         config_exists: cfg_exists,
         active_profile: profile_name.to_string(),
+        preset: profile.preset.name(),
         notes_access,
         notes_accounts_count: notes_acc,
         notes_total_count: notes_total,
@@ -707,6 +839,7 @@ fn handle_doctor(cli: &Cli) -> Result<(), MacflyError> {
             &report.config_path,
             report.config_exists,
             &report.active_profile,
+            report.preset,
             &report.notes_access,
             report.notes_accounts_count,
             report.notes_total_count,
@@ -784,6 +917,7 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
             raw_html,
             no_redact,
         } => {
+            ensure_redaction_bypass_allowed(*no_redact)?;
             let note = adapter.read(profile_name, profile, id, *raw_html, *no_redact)?;
             match cli.format {
                 OutputFormat::Pretty => {
@@ -817,6 +951,7 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
             limit,
             no_redact,
         } => {
+            ensure_redaction_bypass_allowed(*no_redact)?;
             let list = adapter.list(
                 profile_name,
                 profile,
@@ -916,10 +1051,7 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
                 operations,
             };
             let plan = store.create(profile_name, profile, proposal, 900)?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                _ => emit_json(cli.format, &plan)?,
-            }
+            emit_plan(cli, &plan)?;
             Ok(())
         }
     }
@@ -999,6 +1131,7 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
             mailbox,
             no_redact,
         } => {
+            ensure_redaction_bypass_allowed(*no_redact)?;
             let msg = adapter.read(
                 profile_name,
                 profile,
@@ -1036,6 +1169,7 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
             limit,
             no_redact,
         } => {
+            ensure_redaction_bypass_allowed(*no_redact)?;
             let list = adapter.list(
                 profile_name,
                 profile,
@@ -1133,10 +1267,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
             };
             let proposal: PlanProposal = serde_json::from_str(&raw)?;
             let plan = store.create(profile_name, profile, proposal, *ttl_secs)?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                _ => emit_json(cli.format, &plan)?,
-            }
+            emit_plan(cli, &plan)?;
             Ok(())
         }
         PlanAction::List => {
@@ -1158,22 +1289,19 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                         }
                     }
                 }
-                _ => emit_json(cli.format, &plans)?,
+                _ => {
+                    let plans: Vec<_> = plans.iter().map(|p| p.for_output()).collect();
+                    emit_json(cli.format, &plans)?
+                }
             }
             Ok(())
         }
         PlanAction::Inspect { plan_id } => {
             let plan = store.load(plan_id)?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                _ => emit_json(cli.format, &plan)?,
-            }
+            emit_plan(cli, &plan)?;
             Ok(())
         }
-        PlanAction::Approve {
-            plan_id,
-            confirm_code,
-        } => {
+        PlanAction::Approve { plan_id } => {
             if !io::stdin().is_terminal() {
                 return Err(MacflyError::ApprovalError(
                     "Plan-Freigabe erfordert immer ein interaktives Terminal (Schutz gegen Self-Approval durch Agenten oder Skripte)."
@@ -1191,20 +1319,14 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                     println!("  {line}");
                 }
             }
-            let code = match confirm_code {
-                Some(c) => c.clone(),
-                None => {
-                    print!(
-                        "\nZur Freigabe Prüfcode '{}' eingeben: ",
-                        plan.approval_code
-                    );
-                    io::stdout().flush()?;
-                    let mut answer = String::new();
-                    io::stdin().read_line(&mut answer)?;
-                    answer.trim().to_string()
-                }
-            };
-            let approved = store.approve(plan_id, &code)?;
+            print!(
+                "\nZur Freigabe Prüfcode '{}' eingeben: ",
+                plan.approval_code
+            );
+            io::stdout().flush()?;
+            let mut answer = String::new();
+            io::stdin().read_line(&mut answer)?;
+            let approved = store.approve(plan_id, answer.trim())?;
             match cli.format {
                 OutputFormat::Pretty => {
                     println!(
@@ -1212,7 +1334,7 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                         approved.plan_id, approved.plan_id
                     );
                 }
-                _ => emit_json(cli.format, &approved)?,
+                _ => emit_json(cli.format, &approved.for_output())?,
             }
             Ok(())
         }
@@ -1422,10 +1544,7 @@ fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyErr
                 operations,
             };
             let plan = store.create(profile_name, profile, proposal, 900)?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                _ => emit_json(cli.format, &plan)?,
-            }
+            emit_plan(cli, &plan)?;
             Ok(())
         }
     }
@@ -1627,10 +1746,7 @@ fn handle_context(cli: &Cli, action: &ContextAction) -> Result<(), MacflyError> 
                     }],
                 };
                 let plan = store.create(profile_name, profile, proposal, 900)?;
-                match cli.format {
-                    OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                    _ => emit_json(cli.format, &plan)?,
-                }
+                emit_plan(cli, &plan)?;
             } else {
                 match cli.format {
                     OutputFormat::Pretty => ui::render_meeting_prep(&prep, cli.color.into()),
@@ -2110,10 +2226,7 @@ fn handle_safari(cli: &Cli, action: &SafariAction) -> Result<(), MacflyError> {
                 }],
             };
             let plan = store.create(profile_name, profile, proposal, 900)?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_plan(&plan, cli.color.into()),
-                _ => emit_json(cli.format, &plan)?,
-            }
+            emit_plan(cli, &plan)?;
             Ok(())
         }
     }

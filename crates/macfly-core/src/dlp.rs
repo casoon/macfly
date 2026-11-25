@@ -9,6 +9,8 @@ struct Rule {
     name: &'static str,
     label: &'static str,
     regex: Regex,
+    /// Optionale Zusatzprüfung des Treffers (z. B. Luhn-Prüfsumme), um Fehlalarme zu vermeiden.
+    validate: Option<fn(&str) -> bool>,
 }
 
 static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
@@ -20,6 +22,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
                 r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
             )
             .expect("valid private_key regex"),
+            validate: None,
         },
         Rule {
             name: "api_key",
@@ -28,17 +31,21 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
                 r"\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{10,})\b",
             )
             .expect("valid api_key regex"),
+            validate: None,
         },
         Rule {
             name: "iban",
             label: "IBAN",
             regex: Regex::new(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}(?:[ ]?[A-Z0-9]{1,4})?\b")
                 .expect("valid iban regex"),
+            validate: None,
         },
         Rule {
             name: "credit_card",
             label: "CREDIT_CARD",
-            regex: Regex::new(r"\b(?:\d{4}[ -]){3}\d{4}\b").expect("valid credit_card regex"),
+            // 13–19 Ziffern, optional in Gruppen mit Leerzeichen/Bindestrich; nur gültige Luhn-Summen.
+            regex: Regex::new(r"\b\d(?:[ -]?\d){12,18}\b").expect("valid credit_card regex"),
+            validate: Some(luhn_valid),
         },
         Rule {
             name: "otp_code",
@@ -47,6 +54,17 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
                 r"(?i)\b(?:otp|tan|2fa|verification code|sicherheitscode|bestätigungscode|code)\s*[:#-]?\s*\d{6}\b",
             )
             .expect("valid otp_code regex"),
+            validate: None,
+        },
+        Rule {
+            // Nur der Wert hinter dem Schlüsselwort wird geschwärzt, das Schlüsselwort bleibt lesbar.
+            name: "password",
+            label: "PASSWORD",
+            regex: Regex::new(
+                r"(?i)\b(?:passwort|kennwort|password|passwd|pwd|pin)\s*[:=]\s*(?P<secret>\S+)",
+            )
+            .expect("valid password regex"),
+            validate: None,
         },
     ]
 });
@@ -68,9 +86,22 @@ pub fn apply_dlp(input: &str, cfg: &DlpConfig) -> RedactionResult {
                 continue;
             }
             let mut hit_count = 0usize;
-            let replaced = rule.regex.replace_all(&text, |_: &regex::Captures<'_>| {
+            let replaced = rule.regex.replace_all(&text, |caps: &regex::Captures<'_>| {
+                let whole = caps.get(0).expect("match");
+                if let Some(check) = rule.validate
+                    && !check(whole.as_str())
+                {
+                    return whole.as_str().to_string();
+                }
                 hit_count += 1;
-                format!("[REDACTED:{}_{}]", rule.label, hit_count)
+                let marker = format!("[REDACTED:{}_{}]", rule.label, hit_count);
+                match caps.name("secret") {
+                    Some(secret) => format!(
+                        "{}{marker}",
+                        &whole.as_str()[..secret.start() - whole.start()]
+                    ),
+                    None => marker,
+                }
             });
             if hit_count > 0 {
                 text = replaced.into_owned();
@@ -93,6 +124,25 @@ pub fn apply_dlp(input: &str, cfg: &DlpConfig) -> RedactionResult {
     }
 }
 
+/// Luhn-Prüfsumme über alle Ziffern eines Kandidaten.
+fn luhn_valid(candidate: &str) -> bool {
+    let digits: Vec<u32> = candidate.chars().filter_map(|c| c.to_digit(10)).collect();
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(i, &d)| {
+            if i % 2 == 1 {
+                let x = d * 2;
+                if x > 9 { x - 9 } else { x }
+            } else {
+                d
+            }
+        })
+        .sum();
+    sum % 10 == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +159,30 @@ mod tests {
         assert_eq!(res.counts.get("api_key"), Some(&1));
         assert_eq!(res.counts.get("otp_code"), Some(&1));
         assert!(!res.truncated);
+    }
+
+    #[test]
+    fn redacts_cards_with_and_without_separators_only_if_luhn_valid() {
+        let cfg = DlpConfig::default();
+        let sample = "Karte 4111111111111111, alt 4111 1111 1111 1111, Bestellnr 1234567890123456, Tel 030 1234 5678 90.";
+        let res = apply_dlp(sample, &cfg);
+        assert!(!res.text.contains("4111111111111111"));
+        assert!(!res.text.contains("4111 1111 1111 1111"));
+        assert!(res.text.contains("1234567890123456"));
+        assert!(res.text.contains("030 1234 5678 90"));
+        assert_eq!(res.counts.get("credit_card"), Some(&2));
+    }
+
+    #[test]
+    fn redacts_password_value_but_keeps_keyword() {
+        let cfg = DlpConfig::default();
+        let sample = "WLAN Passwort: Hund123\nRouter-PIN = 4711\npassword=s3cr3t!";
+        let res = apply_dlp(sample, &cfg);
+        assert!(res.text.contains("Passwort: [REDACTED:PASSWORD_1]"));
+        assert!(res.text.contains("Router-PIN = [REDACTED:PASSWORD_2]"));
+        assert!(res.text.contains("password=[REDACTED:PASSWORD_3]"));
+        assert!(!res.text.contains("Hund123"));
+        assert!(!res.text.contains("s3cr3t"));
     }
 
     #[test]

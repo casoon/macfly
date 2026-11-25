@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use macfly_core::config::Config;
+use macfly_core::config::{Config, Preset};
 use macfly_core::plan::PlanProposal;
 
 fn extract_ts_const(source: &str, name: &str) -> String {
@@ -41,5 +41,5 @@ fn demo_astro_json_examples_match_rust_schemas() {
     let config_json = extract_ts_const(&source, "macflyConfigJson");
     let cfg: Config =
         serde_json::from_str(&config_json).expect("macflyConfigJson must match Config");
-    assert!(cfg.profiles.contains_key("default"));
+    assert_eq!(cfg.profiles["default"].preset, Preset::Balanced);
 }

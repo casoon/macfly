@@ -60,7 +60,7 @@ args = ["mcp", "--profile", "default"]
 }
 ```
 
-## Available MCP tools (19 total)
+## Available MCP tools (20 total)
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -81,8 +81,9 @@ args = ["mcp", "--profile", "default"]
 | `context_person` | Read | 360° dossier for a person/company across Contacts, Mail, Notes, Calendar & Reminders |
 | `context_meeting_prep` | Read | Prepare for upcoming/matching calendar event with related contacts, mails & notes |
 | `context_weekly_review` | Read | Weekly review of modified notes, unread mails, overdue tasks, events & Safari tabs |
-| `plan_create` | Propose | Validate and store a proposed change plan (no execution) |
+| `plan_create` | Propose | Validate and store a proposed change plan (no execution); auto-approved if the profile's preset allows it |
 | `plan_inspect` | Read | Inspect status, hash, and preview of a stored plan |
+| `plan_apply` | Write | Execute a plan that is already approved (by the preset or by you); rejects pending plans |
 
 ## Ready-to-use `SKILL.md` export
 
@@ -93,14 +94,26 @@ tailored `SKILL.md` with one command:
 macfly skill export --output ./.claude/skills/macfly
 ```
 
-## Why `approve` and `apply` are missing from MCP
+## Why `approve` is missing from MCP
 
 This is intentional. Even if an agent is tricked by indirect prompt injection
-inside an incoming email, it **cannot** approve or apply a plan through MCP.
-The agent proposes a `plan_id`; you review and approve it in your own terminal:
+inside an incoming email, it **cannot** approve a plan through MCP. Which plans
+are approved automatically is decided by the profile's
+[security preset](/macfly/docs/guide/plans-and-workflows/#security-presets)
+(`strict`, `balanced` by default, or `open`) — never by the agent.
+
+- **Auto-approved plans** (e.g. a new note or a mail draft under `balanced`)
+  come back from `plan_create` with `"status": "approved"`; the agent runs them
+  with `plan_apply`.
+- **Everything else** comes back as `"status": "pending_approval"`. You review
+  and approve it in your own terminal, then the agent (or you) applies it:
 
 ```bash
 macfly plan inspect <plan-id>
 macfly plan approve <plan-id>
 macfly plan apply <plan-id>
 ```
+
+Run `macfly policy --profile <name>` to see exactly what an MCP profile may do.
+A separate `strict` profile for MCP clients is a good choice for sensitive
+mailboxes.
