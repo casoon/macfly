@@ -149,6 +149,10 @@ Point any MCP-compatible client (Claude Desktop, Cursor, Antigravity, or local L
 
 See [MCP & AI Agents](https://casoon.github.io/macfly/docs/guide/mcp-and-agents/) and [Security Model](https://casoon.github.io/macfly/docs/architecture/security-model/) for details.
 
+## Author
+
+Built and maintained by [Jörn Seidel](https://www.casoon.de/joern-seidel/) ([CASOON](https://www.casoon.de/)). Background and design decisions are described in an article on Insights (in German): [MacFly: Kontrollierter KI-Zugriff auf Notizen, Mail und Kalender](https://insights.casoon.de/artikel/macfly-macos-automatisierung-ki-agenten-freigabe/).
+
 ## License
 
 Dual-licensed under **MIT** or **Apache-2.0**, at your option.
