@@ -170,7 +170,9 @@ fn parse_notes_json(raw: &str, fallback_title: &str) -> Result<Vec<ImportedNote>
         Value::Array(items) => {
             let mut out = Vec::new();
             for (idx, item) in items.iter().enumerate() {
-                if let Some(note) = note_from_json_value(item, &format!("{fallback_title} #{}", idx + 1)) {
+                if let Some(note) =
+                    note_from_json_value(item, &format!("{fallback_title} #{}", idx + 1))
+                {
                     out.push(note);
                 }
             }
@@ -219,7 +221,15 @@ fn note_from_json_value(val: &Value, fallback_title: &str) -> Option<ImportedNot
         .unwrap_or_else(|| fallback_title.to_string());
     let body = pick_str(
         obj,
-        &["body", "body_text", "content", "text", "markdown", "note", "description"],
+        &[
+            "body",
+            "body_text",
+            "content",
+            "text",
+            "markdown",
+            "note",
+            "description",
+        ],
     )
     .unwrap_or_default();
     let folder_override = pick_str(obj, &["folder", "folder_path"]);
@@ -238,11 +248,22 @@ fn parse_notes_csv(raw: &str) -> Result<Vec<ImportedNote>, MacflyError> {
     if rows.len() < 2 {
         return Ok(Vec::new());
     }
-    let headers: Vec<String> = rows[0].iter().map(|h| h.trim().to_ascii_lowercase()).collect();
+    let headers: Vec<String> = rows[0]
+        .iter()
+        .map(|h| h.trim().to_ascii_lowercase())
+        .collect();
     let title_idx = find_col(&headers, &["title", "name", "subject", "heading"]).unwrap_or(0);
     let body_idx = find_col(
         &headers,
-        &["body", "content", "text", "notes", "note", "description", "markdown"],
+        &[
+            "body",
+            "content",
+            "text",
+            "notes",
+            "note",
+            "description",
+            "markdown",
+        ],
     )
     .or(if headers.len() > 1 { Some(1) } else { None });
     let folder_idx = find_col(&headers, &["folder", "folder_path", "category"]);
@@ -329,7 +350,11 @@ fn parse_reminders_json(raw: &str) -> Result<Vec<ImportedReminder>, MacflyError>
     match &val {
         Value::Array(items) => Ok(items.iter().filter_map(reminder_from_json_value).collect()),
         Value::Object(map) => {
-            if let Some(Value::Array(items)) = map.get("reminders").or_else(|| map.get("tasks")).or_else(|| map.get("items")) {
+            if let Some(Value::Array(items)) = map
+                .get("reminders")
+                .or_else(|| map.get("tasks"))
+                .or_else(|| map.get("items"))
+            {
                 return Ok(items.iter().filter_map(reminder_from_json_value).collect());
             }
             Ok(reminder_from_json_value(&val).into_iter().collect())
@@ -386,8 +411,12 @@ fn parse_reminders_csv(raw: &str) -> Result<Vec<ImportedReminder>, MacflyError> 
     if rows.len() < 2 {
         return Ok(Vec::new());
     }
-    let headers: Vec<String> = rows[0].iter().map(|h| h.trim().to_ascii_lowercase()).collect();
-    let title_idx = find_col(&headers, &["title", "task", "name", "content", "summary"]).unwrap_or(0);
+    let headers: Vec<String> = rows[0]
+        .iter()
+        .map(|h| h.trim().to_ascii_lowercase())
+        .collect();
+    let title_idx =
+        find_col(&headers, &["title", "task", "name", "content", "summary"]).unwrap_or(0);
     let notes_idx = find_col(&headers, &["notes", "description", "body", "comment"]);
     let list_idx = find_col(&headers, &["list", "project", "category"]);
 
@@ -500,7 +529,11 @@ fn pick_str(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<Strin
 }
 
 fn unquote(val: &str) -> String {
-    val.trim().trim_matches('"').trim_matches('\'').trim().to_string()
+    val.trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]

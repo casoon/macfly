@@ -57,10 +57,7 @@ impl ContactsAdapter {
             for email in &c.emails {
                 let norm_email = email.trim().to_lowercase();
                 if !norm_email.is_empty() {
-                    by_email
-                        .entry(norm_email)
-                        .or_default()
-                        .push(c.name.clone());
+                    by_email.entry(norm_email).or_default().push(c.name.clone());
                 }
             }
             if c.emails.is_empty() && c.phones.is_empty() {
@@ -68,8 +65,10 @@ impl ContactsAdapter {
             }
         }
 
-        let duplicate_names: BTreeMap<String, usize> =
-            by_name.into_iter().filter(|(_, count)| *count > 1).collect();
+        let duplicate_names: BTreeMap<String, usize> = by_name
+            .into_iter()
+            .filter(|(_, count)| *count > 1)
+            .collect();
         let duplicate_emails: BTreeMap<String, Vec<String>> = by_email
             .into_iter()
             .filter(|(_, names)| names.len() > 1)

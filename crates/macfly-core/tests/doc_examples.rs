@@ -20,8 +20,8 @@ fn extract_ts_const(source: &str, name: &str) -> String {
 
 #[test]
 fn demo_astro_json_examples_match_rust_schemas() {
-    let demo_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../site/src/pages/demo.astro");
+    let demo_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../site/src/pages/demo.astro");
     if !demo_path.exists() {
         // When packaged on crates.io, site/ is excluded from the crate tarball.
         return;

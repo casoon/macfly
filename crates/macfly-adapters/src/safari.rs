@@ -23,8 +23,7 @@ impl SafariAdapter {
 
     pub fn tabs(&self, query: Option<&str>) -> Result<SafariTabsResult, MacflyError> {
         let payload = serde_json::json!({ "query": query });
-        let raw: RawSafariTabs =
-            run_jxa("Apple Safari", SCRIPT_TABS, &payload, self.timeout_secs)?;
+        let raw: RawSafariTabs = run_jxa("Apple Safari", SCRIPT_TABS, &payload, self.timeout_secs)?;
         Ok(SafariTabsResult {
             schema_version: "1.0".to_string(),
             total_tabs: raw.total_tabs,

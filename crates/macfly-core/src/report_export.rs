@@ -155,7 +155,10 @@ pub fn person_context_to_markdown(ctx: &PersonContext) -> String {
             .as_deref()
             .and_then(|s| s.get(..10))
             .unwrap_or("—");
-        md.push_str(&format!("- `{date}` `[{}]` **{}**\n", n.folder_path, n.title));
+        md.push_str(&format!(
+            "- `{date}` `[{}]` **{}**\n",
+            n.folder_path, n.title
+        ));
     }
     md.push_str("\n## Events & Reminders\n");
     for ev in &ctx.upcoming_events {
@@ -164,7 +167,10 @@ pub fn person_context_to_markdown(ctx: &PersonContext) -> String {
             .as_deref()
             .and_then(|s| s.get(..16))
             .unwrap_or("?");
-        md.push_str(&format!("- **Event:** `{start}` [{}] {}\n", ev.calendar, ev.title));
+        md.push_str(&format!(
+            "- **Event:** `{start}` [{}] {}\n",
+            ev.calendar, ev.title
+        ));
     }
     for r in &ctx.open_reminders {
         md.push_str(&format!("- [ ] `[{}]` {}\n", r.list, r.title));

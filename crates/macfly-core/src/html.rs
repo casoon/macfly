@@ -60,14 +60,9 @@ pub fn html_to_clean_text(html: &str) -> String {
     let stripped = TAG_RE.replace_all(&with_breaks, "");
     let decoded = decode_basic_entities(&stripped);
 
-    let normalized_lines: Vec<String> = decoded
-        .lines()
-        .map(|l| l.trim_end().to_string())
-        .collect();
+    let normalized_lines: Vec<String> = decoded.lines().map(|l| l.trim_end().to_string()).collect();
     let joined = normalized_lines.join("\n");
-    MULTI_NL_RE
-        .replace_all(joined.trim(), "\n\n")
-        .into_owned()
+    MULTI_NL_RE.replace_all(joined.trim(), "\n\n").into_owned()
 }
 
 /// Bereinigt E-Mail-Text: entfernt überlange Zitatketten (`> ...`) und klassische Reply-Trenner,
@@ -84,19 +79,21 @@ pub fn clean_mail_body(raw: &str) -> String {
             continue;
         }
         if quote_lines_skipped > 0 {
-            out.push(format!("[… {quote_lines_skipped} zitierte Zeilen ausgeblendet]"));
+            out.push(format!(
+                "[… {quote_lines_skipped} zitierte Zeilen ausgeblendet]"
+            ));
             quote_lines_skipped = 0;
         }
         out.push(line.trim_end().to_string());
     }
     if quote_lines_skipped > 0 {
-        out.push(format!("[… {quote_lines_skipped} zitierte Zeilen ausgeblendet]"));
+        out.push(format!(
+            "[… {quote_lines_skipped} zitierte Zeilen ausgeblendet]"
+        ));
     }
 
     let joined = out.join("\n");
-    MULTI_NL_RE
-        .replace_all(joined.trim(), "\n\n")
-        .into_owned()
+    MULTI_NL_RE.replace_all(joined.trim(), "\n\n").into_owned()
 }
 
 fn decode_basic_entities(s: &str) -> String {
