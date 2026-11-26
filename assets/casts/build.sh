@@ -75,12 +75,12 @@ steps:
   - run: macfly plan create --input reorganize-notes.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mplan-1795370000-a1b2c3d4\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718   \e[2mApproval code: \e[0m\e[1;93mA1B2C3\e[0m\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mplan-1795370000-a1b2c3d4\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718\r\n  \e[2mStatus: \e[0m\e[1;93mpending approval\e[0m (moves need you under 'balanced')\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
   - wait: 1100
-  - run: macfly plan approve plan-1795370000-a1b2c3d4 --confirm-code A1B2C3
+  - run: macfly plan approve plan-1795370000-a1b2c3d4
   - wait: 400
   - output:
-      raw: "\e[1;92m✔\e[0m Plan Approved (interactive TTY verified · SHA-256 intact)\r\n\r\n"
+      raw: "  \e[2mType code \e[0m\e[1;93mC41E9A\e[0m\e[2m to approve: \e[0mC41E9A\r\n\e[1;92m✔\e[0m Plan Approved (interactive terminal · approved by: human)\r\n\r\n"
   - wait: 700
   - run: macfly plan apply plan-1795370000-a1b2c3d4
   - wait: 500
@@ -100,12 +100,12 @@ steps:
   - run: macfly notes import --input ./obsidian-vault --folder "00 · Inbox" --recursive
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Multi-Format Notes Import Plan Created\r\n  \e[2mParsed files: \e[0m\e[36m42\e[0m (.md: 34, .html: 4, .json: 2, .csv: 2)\r\n  \e[2mTarget folder: \e[0m00 · Inbox   \e[2mPlan ID: \e[0m7c9e6679-7425-40de-944b-e07fc1f90ae7\r\n  \e[2mApproval code: \e[0m\e[1;93m8f4e2a\e[0m\r\n\r\n"
+      raw: "\e[1;96m!\e[0m Multi-Format Notes Import Plan Created\r\n  \e[2mParsed files: \e[0m\e[36m42\e[0m (.md: 34, .html: 4, .json: 2, .csv: 2)\r\n  \e[2mTarget folder: \e[0m00 · Inbox   \e[2mPlan ID: \e[0m7c9e6679-7425-40de-944b-e07fc1f90ae7\r\n  \e[2mStatus: \e[0m\e[1;93mpending approval\e[0m (more than 5 operations)\r\n\r\n"
   - wait: 1100
   - run: macfly reminders import --input ./todoist-tasks.csv --list "Work"
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Reminders Import Plan Created\r\n  \e[2mTasks parsed: \e[0m\e[36m18\e[0m (RFC-4180 CSV with due_date, priority, notes)\r\n  \e[2mTarget list: \e[0mWork         \e[2mApproval code: \e[0m\e[1;93m3d9c1b\e[0m\r\n\r\n"
+      raw: "\e[1;96m!\e[0m Reminders Import Plan Created\r\n  \e[2mTasks parsed: \e[0m\e[36m18\e[0m (RFC-4180 CSV with due_date, priority, notes)\r\n  \e[2mTarget list: \e[0mWork         \e[2mStatus: \e[0m\e[1;93mpending approval\e[0m\r\n\r\n"
   - wait: 1100
   - run: macfly notes export --output ./git-knowledge-base --folder "10 · Work"
   - wait: 450
@@ -155,7 +155,7 @@ steps:
   - run: macfly plan create --input draft-reply.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail_create_draft · drafts only)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)   \e[2mApproval code: \e[0m\e[1;93m9C4A1E\e[0m\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail_create_draft · drafts only)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)\r\n  \e[2mStatus: \e[0m\e[1;92mapproved\e[0m (preset: balanced)\r\n"
   - wait: 4500
 YAML
 

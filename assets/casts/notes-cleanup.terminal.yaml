@@ -13,12 +13,12 @@ steps:
   - run: macfly plan create --input reorganize-notes.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mplan-1795370000-a1b2c3d4\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718   \e[2mApproval code: \e[0m\e[1;93mA1B2C3\e[0m\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked\r\n  \e[2mPlan ID: \e[0mplan-1795370000-a1b2c3d4\r\n  \e[2mOperations: \e[0m\e[36m27\e[0m   \e[2mSHA-256: \e[0ma1b2c3d4e5f60718\r\n  \e[2mStatus: \e[0m\e[1;93mpending approval\e[0m (moves need you under 'balanced')\r\n  \e[2mFidelity Guard: \e[0m\e[92m✔\e[0m 19 notes with attachments/tables moved losslessly\r\n\r\n"
   - wait: 1100
-  - run: macfly plan approve plan-1795370000-a1b2c3d4 --confirm-code A1B2C3
+  - run: macfly plan approve plan-1795370000-a1b2c3d4
   - wait: 400
   - output:
-      raw: "\e[1;92m✔\e[0m Plan Approved (interactive TTY verified · SHA-256 intact)\r\n\r\n"
+      raw: "  \e[2mType code \e[0m\e[1;93mC41E9A\e[0m\e[2m to approve: \e[0mC41E9A\r\n\e[1;92m✔\e[0m Plan Approved (interactive terminal · approved by: human)\r\n\r\n"
   - wait: 700
   - run: macfly plan apply plan-1795370000-a1b2c3d4
   - wait: 500

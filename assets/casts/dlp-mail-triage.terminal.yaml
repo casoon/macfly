@@ -18,5 +18,5 @@ steps:
   - run: macfly plan create --input draft-reply.json
   - wait: 450
   - output:
-      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail_create_draft · drafts only)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)   \e[2mApproval code: \e[0m\e[1;93m9C4A1E\e[0m\r\n"
+      raw: "\e[1;96m!\e[0m Plan Created & Hash-Locked (mail_create_draft · drafts only)\r\n  \e[2mSignature: \e[0mCorporate Standard (from Apple Mail)\r\n  \e[2mStatus: \e[0m\e[1;92mapproved\e[0m (preset: balanced)\r\n"
   - wait: 4500
