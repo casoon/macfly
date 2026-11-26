@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **CLI:** the menus of `macfly config init` wrap long descriptions on narrow terminals instead of cutting them (runemark 0.11).
 - **CLI:** `macfly plan approve` applies the plan right after you type the code, so one command replaces approve plus apply; `--no-apply` only approves.
 - **CLI:** the approval view and the result of `plan approve`/`plan apply` are bilingual (English by default; set `"language": "de"` in the config, let `macfly config init` ask, or override with `MACFLY_LANG=de|en`) and show a numbered flow; serial operations are summarised ("Export 200 photos"), reviewable content such as mail drafts and note text stays in full, and `--details` adds every detail.
 - **Pages:** the project site uses the current shared theme (0.19.0).
