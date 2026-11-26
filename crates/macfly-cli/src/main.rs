@@ -15,6 +15,7 @@ use macfly_adapters::context::{
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::photos::PhotosAdapter;
 use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::{Config, Preset, data_dir};
@@ -25,8 +26,10 @@ use macfly_core::import::{
 };
 use macfly_core::journal::AuditJournal;
 use macfly_core::plan::{
-    ACTION_RISKS, PlanOperation, PlanProposal, PlanStore, StoredPlan, preset_allows,
+    ACTION_RISKS, ImageFormat, PhotoConvert, PlanOperation, PlanProposal, PlanStore, SidecarFormat,
+    StoredPlan, preset_allows,
 };
+use macfly_core::plan_text::Lang;
 use macfly_core::report_export::{
     daily_brief_to_typst, person_context_to_markdown, person_context_to_typst,
     weekly_review_to_typst,
@@ -133,6 +136,11 @@ enum Commands {
         #[command(subcommand)]
         action: SafariAction,
     },
+    /// Apple Photos: Alben und Fotos auflisten, Export (Originale, Metadaten, Umwandlung) per Plan
+    Photos {
+        #[command(subcommand)]
+        action: PhotosAction,
+    },
     /// Transaktionale Änderungspläne (Plan → Inspect → Approve → Apply)
     Plan {
         #[command(subcommand)]
@@ -178,6 +186,9 @@ enum ConfigAction {
         /// Sicherheitsstufe: strict, balanced (Standard) oder open. Ohne Angabe wird im Terminal gefragt.
         #[arg(long, value_parser = ["strict", "balanced", "open"])]
         preset: Option<String>,
+        /// Sprache der Ausgaben: en (Standard) oder de. Ohne Angabe wird im Terminal gefragt.
+        #[arg(long, value_parser = ["en", "de"])]
+        language: Option<String>,
     },
     /// Zeigt den Pfad der aktiven Konfigurationsdatei
     Path,
@@ -416,6 +427,96 @@ enum SafariAction {
     },
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SidecarArg {
+    None,
+    Xmp,
+    Json,
+    Both,
+}
+
+impl From<SidecarArg> for SidecarFormat {
+    fn from(v: SidecarArg) -> Self {
+        match v {
+            SidecarArg::None => Self::None,
+            SidecarArg::Xmp => Self::Xmp,
+            SidecarArg::Json => Self::Json,
+            SidecarArg::Both => Self::Both,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ConvertArg {
+    Jpeg,
+    Png,
+    Tiff,
+    Heic,
+}
+
+impl From<ConvertArg> for ImageFormat {
+    fn from(v: ConvertArg) -> Self {
+        match v {
+            ConvertArg::Jpeg => Self::Jpeg,
+            ConvertArg::Png => Self::Png,
+            ConvertArg::Tiff => Self::Tiff,
+            ConvertArg::Heic => Self::Heic,
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum PhotosAction {
+    /// Alben mit Anzahl der Fotos auflisten
+    Albums,
+    /// Fotos und Videos mit Metadaten auflisten (neueste zuerst)
+    List {
+        #[arg(long)]
+        album: Option<String>,
+        /// Schlagwort (Teilwort, ohne Groß-/Kleinschreibung)
+        #[arg(long)]
+        keyword: Option<String>,
+        /// Nur Aufnahmen ab diesem Datum (JJJJ-MM-TT)
+        #[arg(long)]
+        since: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
+    /// Exportplan erstellen: Originale oder gerenderte Fotos, optional mit XMP/JSON-Metadaten und Umwandlung
+    Export {
+        /// Zielordner (neue Dateien, nichts wird überschrieben)
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        album: Option<String>,
+        #[arg(long)]
+        keyword: Option<String>,
+        #[arg(long)]
+        since: Option<String>,
+        /// Einzelne Medien-IDs (aus `photos list`), mehrfach angebbar
+        #[arg(long = "id")]
+        ids: Vec<String>,
+        /// Höchstens so viele Fotos exportieren (0 = alle Treffer)
+        #[arg(long, default_value_t = 0)]
+        limit: usize,
+        /// Originaldateien statt gerenderter JPEGs mit Bearbeitungen
+        #[arg(long)]
+        originals: bool,
+        /// Begleitdatei mit Titel, Beschreibung, Schlagwörtern, Datum und Ort
+        #[arg(long, value_enum, default_value = "none")]
+        sidecar: SidecarArg,
+        /// Bilder mit dem macOS-Bordmittel `sips` umwandeln
+        #[arg(long, value_enum)]
+        convert: Option<ConvertArg>,
+        /// Längste Kante in Pixeln (nur verkleinern, braucht --convert)
+        #[arg(long)]
+        max_size: Option<u32>,
+        /// Qualität 1–100 für JPEG und HEIC (braucht --convert)
+        #[arg(long)]
+        quality: Option<u8>,
+    },
+}
+
 #[derive(Subcommand)]
 enum PlanAction {
     /// Erstellt einen geprüften Änderungsplan aus JSON-Datei oder stdin
@@ -431,14 +532,25 @@ enum PlanAction {
     List,
     /// Zeigt Details, Diff-Vorschau und Freigabestatus eines Plans
     Inspect { plan_id: String },
-    /// Gibt einen Plan nach Prüfung frei (erfordert immer ein interaktives TTY)
-    Approve { plan_id: String },
+    /// Gibt einen Plan nach Prüfung frei und führt ihn sofort aus (erfordert immer ein interaktives TTY)
+    Approve {
+        plan_id: String,
+        /// Nur freigeben, nicht ausführen (Ausführung später mit `macfly plan apply`)
+        #[arg(long)]
+        no_apply: bool,
+        /// Alle Einzelheiten und technischen Angaben anzeigen
+        #[arg(long)]
+        details: bool,
+    },
     /// Führt einen zuvor freigegebenen Plan aus und protokolliert im Audit-Journal
     Apply {
         plan_id: String,
         /// Setzt einen teilweise ausgeführten Plan (partially_applied) ab der ersten offenen Operation fort
         #[arg(long)]
         resume: bool,
+        /// Technische Angaben (Prüfsummen, Dateipfade) mit anzeigen
+        #[arg(long)]
+        details: bool,
     },
 }
 
@@ -554,6 +666,9 @@ struct DoctorReport {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let Ok((cfg, _, _)) = Config::load_or_default(cli.config.as_deref()) {
+        Lang::set_configured(cfg.language);
+    }
     match run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
@@ -581,6 +696,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Shortcuts { action } => handle_shortcuts(cli, action),
         Commands::Contacts { action } => handle_contacts(cli, action),
         Commands::Safari { action } => handle_safari(cli, action),
+        Commands::Photos { action } => handle_photos(cli, action),
         Commands::Plan { action } => handle_plan(cli, action),
         Commands::Context { action } => handle_context(cli, action),
         Commands::Report { action } => handle_report(cli, action),
@@ -628,15 +744,27 @@ fn emit_json<T: Serialize>(format: OutputFormat, val: &T) -> Result<(), MacflyEr
 
 fn handle_config(cli: &Cli, action: &ConfigAction) -> Result<(), MacflyError> {
     match action {
-        ConfigAction::Init { force, preset } => {
+        ConfigAction::Init {
+            force,
+            preset,
+            language,
+        } => {
+            let interactive =
+                matches!(cli.format, OutputFormat::Pretty) && io::stdin().is_terminal();
+            let language = match language {
+                Some(name) => Lang::parse(name).unwrap_or_default(),
+                None if interactive => ask_language(cli.color.into())?,
+                None => Lang::default(),
+            };
+            Lang::set_configured(language);
             let preset = match preset {
                 Some(name) => Preset::parse(name).unwrap_or_default(),
                 None if matches!(cli.format, OutputFormat::Pretty) && io::stdin().is_terminal() => {
-                    ask_preset()?
+                    ask_preset(language, cli.color.into())?
                 }
                 None => Preset::default(),
             };
-            let path = Config::write_default(cli.config.as_deref(), *force, preset)?;
+            let path = Config::write_default(cli.config.as_deref(), *force, preset, language)?;
             match cli.format {
                 OutputFormat::Pretty => println!(
                     "Config angelegt: {} (Sicherheitsstufe: {})\nDetails: macfly policy",
@@ -680,35 +808,69 @@ fn handle_config(cli: &Cli, action: &ConfigAction) -> Result<(), MacflyError> {
     }
 }
 
-fn ask_preset() -> Result<Preset, MacflyError> {
-    println!(
-        "Welche Sicherheitsstufe soll gelten? (später änderbar über \"preset\" in der Config)\n"
-    );
-    for (i, p) in Preset::ALL.iter().enumerate() {
-        let marker = if *p == Preset::default() {
-            " (Standard)"
-        } else {
-            ""
-        };
-        println!(
-            "  {}) {}{}\n     {}\n",
-            i + 1,
-            p.name(),
-            marker,
-            p.description()
-        );
+fn cancelled_init() -> MacflyError {
+    MacflyError::ConfigError {
+        path: String::new(),
+        detail: "Abgebrochen / cancelled".to_string(),
     }
-    print!("Auswahl [2]: ");
-    io::stdout().flush()?;
-    let mut answer = String::new();
-    io::stdin().read_line(&mut answer)?;
-    let answer = answer.trim();
-    Ok(match answer {
-        "1" => Preset::Strict,
-        "3" => Preset::Open,
-        "" | "2" => Preset::Balanced,
-        other => Preset::parse(other).unwrap_or_default(),
-    })
+}
+
+fn ask_language(color: ColorMode) -> Result<Lang, MacflyError> {
+    let picked = ui::choose(
+        "MacFly · Language / Sprache",
+        "config init",
+        &[
+            ("en", "English", "default"),
+            ("de", "Deutsch", "Ausgaben von MacFly auf Deutsch"),
+        ],
+        color,
+    )?;
+    Ok(Lang::parse(&picked.ok_or_else(cancelled_init)?).unwrap_or_default())
+}
+
+fn ask_preset(lang: Lang, color: ColorMode) -> Result<Preset, MacflyError> {
+    let desc = |p: Preset| match (p, lang) {
+        (Preset::Strict, Lang::En) => {
+            "Every change needs your approval in the terminal. For sensitive mailboxes and work machines."
+        }
+        (Preset::Balanced, Lang::En) => {
+            "Creating notes, folders, mail drafts and reminders runs automatically (up to 5 operations). Moving, appending, deleting and shortcuts need your approval."
+        }
+        (Preset::Open, Lang::En) => {
+            "Also moves, appends and deletes empty folders automatically. For clean-up and migration sessions. Shortcuts still need your approval."
+        }
+        (p, Lang::De) => p.description(),
+    };
+    let (heading, note) = match lang {
+        Lang::En => (
+            "Security level",
+            "change later via \"preset\" in the config",
+        ),
+        Lang::De => (
+            "Sicherheitsstufe",
+            "später änderbar über \"preset\" in der Config",
+        ),
+    };
+    let default = lang.t(" (Standard)", " (default)");
+    let label = |p: Preset| {
+        if p == Preset::default() {
+            format!("{}{}", p.name(), default)
+        } else {
+            p.name().to_string()
+        }
+    };
+    // Cursor starts on the first entry: the default goes first.
+    let mut order = vec![Preset::default()];
+    order.extend(Preset::ALL.into_iter().filter(|p| *p != Preset::default()));
+    let labels: Vec<String> = order.iter().map(|p| label(*p)).collect();
+    let descs: Vec<&str> = order.iter().map(|p| desc(*p)).collect();
+    let choices: Vec<ui::Choice<'_>> = order
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.name(), labels[i].as_str(), descs[i]))
+        .collect();
+    let picked = ui::choose(heading, note, &choices, color)?;
+    Ok(Preset::parse(&picked.ok_or_else(cancelled_init)?).unwrap_or_default())
 }
 
 #[derive(Serialize)]
@@ -1301,7 +1463,11 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
             emit_plan(cli, &plan)?;
             Ok(())
         }
-        PlanAction::Approve { plan_id } => {
+        PlanAction::Approve {
+            plan_id,
+            no_apply,
+            details,
+        } => {
             if !io::stdin().is_terminal() {
                 return Err(MacflyError::ApprovalError(
                     "Plan-Freigabe erfordert immer ein interaktives Terminal (Schutz gegen Self-Approval durch Agenten oder Skripte)."
@@ -1309,53 +1475,99 @@ fn handle_plan(cli: &Cli, action: &PlanAction) -> Result<(), MacflyError> {
                 ));
             }
             let plan = store.load(plan_id)?;
-            println!("Änderungsplan prüfen: {}", plan.plan_id);
-            println!(
-                "Risiko: {:?} | Reversibilität: {:?} | Hash: {}",
-                plan.risk_level, plan.reversibility, plan.plan_hash
-            );
-            for op in &plan.operations {
-                for line in op.detailed_preview() {
-                    println!("  {line}");
-                }
-            }
+            let lang = Lang::detect();
+            ui::render_plan_for_approval(&plan, cli.color.into(), lang, *details);
             print!(
-                "\nZur Freigabe Prüfcode '{}' eingeben: ",
-                plan.approval_code
+                "\n{}",
+                match lang {
+                    Lang::De =>
+                        format!("Zur Freigabe Prüfcode '{}' eingeben: ", plan.approval_code),
+                    Lang::En => format!(
+                        "Type the confirmation code '{}' to approve: ",
+                        plan.approval_code
+                    ),
+                }
             );
             io::stdout().flush()?;
             let mut answer = String::new();
             io::stdin().read_line(&mut answer)?;
             let approved = store.approve(plan_id, answer.trim())?;
-            match cli.format {
-                OutputFormat::Pretty => {
-                    println!(
-                        "Plan '{}' freigegeben. Ausführen mit:\n  macfly plan apply {}",
-                        approved.plan_id, approved.plan_id
-                    );
+            if *no_apply {
+                match cli.format {
+                    OutputFormat::Pretty => {
+                        println!(
+                            "{}\n  macfly plan apply {}",
+                            lang.t("Freigegeben. Ausführen mit:", "Approved. Run it with:"),
+                            approved.plan_id
+                        );
+                    }
+                    _ => emit_json(cli.format, &approved.for_output())?,
                 }
-                _ => emit_json(cli.format, &approved.for_output())?,
+                return Ok(());
             }
-            Ok(())
-        }
-        PlanAction::Apply { plan_id, resume } => {
-            let journal = AuditJournal::default_journal();
-            let report = apply_approved_plan(
+            if matches!(cli.format, OutputFormat::Pretty) {
+                println!(
+                    "\n{}\n",
+                    lang.t("Freigegeben, wird ausgeführt …", "Approved, running …")
+                );
+            }
+            run_apply(
+                cli,
                 &store,
-                &journal,
-                plan_id,
+                cfg.script_timeout_secs,
                 profile_name,
                 profile,
-                cfg.script_timeout_secs,
-                *resume,
-            )?;
-            match cli.format {
-                OutputFormat::Pretty => ui::render_apply_report(&report, cli.color.into()),
-                _ => emit_json(cli.format, &report)?,
-            }
-            Ok(())
+                plan_id,
+                false,
+                *details,
+            )
         }
+        PlanAction::Apply {
+            plan_id,
+            resume,
+            details,
+        } => run_apply(
+            cli,
+            &store,
+            cfg.script_timeout_secs,
+            profile_name,
+            profile,
+            plan_id,
+            *resume,
+            *details,
+        ),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_apply(
+    cli: &Cli,
+    store: &PlanStore,
+    timeout_secs: u64,
+    profile_name: &str,
+    profile: &macfly_core::config::ProfileConfig,
+    plan_id: &str,
+    resume: bool,
+    details: bool,
+) -> Result<(), MacflyError> {
+    let journal = AuditJournal::default_journal();
+    let report = apply_approved_plan(
+        store,
+        &journal,
+        plan_id,
+        profile_name,
+        profile,
+        timeout_secs,
+        resume,
+    )?;
+    match cli.format {
+        OutputFormat::Pretty => {
+            let plan = store.load(plan_id)?;
+            ui::render_apply_report(&report, &plan, cli.color.into(), Lang::detect(), details);
+        }
+        _ => emit_json(cli.format, &report)?,
+    }
+    Ok(())
 }
 
 fn handle_calendar(cli: &Cli, action: &CalendarAction) -> Result<(), MacflyError> {
@@ -1411,7 +1623,10 @@ fn handle_calendar(cli: &Cli, action: &CalendarAction) -> Result<(), MacflyError
                     .as_deref()
                     .map(|l| format!(" — *{l}*"))
                     .unwrap_or_default();
-                md.push_str(&format!("- **{}** `[{}]` {}{}\n", start, ev.calendar, ev.title, loc));
+                md.push_str(&format!(
+                    "- **{}** `[{}]` {}{}\n",
+                    start, ev.calendar, ev.title, loc
+                ));
             }
             fs::write(output, md)?;
             match cli.format {
@@ -1772,7 +1987,8 @@ fn handle_report(cli: &Cli, action: &ReportAction) -> Result<(), MacflyError> {
 
     let (output, typst_src, md_src) = match action {
         ReportAction::Person { query, output } => {
-            let ctx = build_person_context(profile_name, profile, cfg.script_timeout_secs, query, 15);
+            let ctx =
+                build_person_context(profile_name, profile, cfg.script_timeout_secs, query, 15);
             (
                 output,
                 person_context_to_typst(&ctx),
@@ -1848,7 +2064,9 @@ fn handle_skill(cli: &Cli, action: &SkillAction) -> Result<(), MacflyError> {
         SkillAction::Export { output } => {
             let written = export_skill_file(output, profile_name)?;
             match cli.format {
-                OutputFormat::Pretty => println!("Agent-Skill exportiert nach: {}", written.display()),
+                OutputFormat::Pretty => {
+                    println!("Agent-Skill exportiert nach: {}", written.display())
+                }
                 _ => emit_json(
                     cli.format,
                     &serde_json::json!({ "ok": true, "path": written.display().to_string() }),
@@ -2075,7 +2293,10 @@ fn print_mail_list(
                     "  {marker} {date}  [{}/{}]  {}",
                     m.account, m.mailbox, m.subject
                 );
-                println!("              von: {}  |  local_id: {}", m.sender, m.local_id);
+                println!(
+                    "              von: {}  |  local_id: {}",
+                    m.sender, m.local_id
+                );
             }
         }
         _ => emit_json(format, res)?,
@@ -2135,6 +2356,153 @@ fn collect_files_rec(
         }
     }
     Ok(())
+}
+
+/// Datum im Format JJJJ-MM-TT (nur die Form wird geprüft; Photos liest es als Datum).
+fn validate_since(since: Option<&str>) -> Result<(), MacflyError> {
+    if let Some(d) = since {
+        let b = d.as_bytes();
+        let ok = b.len() == 10
+            && b.iter().enumerate().all(|(i, c)| match i {
+                4 | 7 => *c == b'-',
+                _ => c.is_ascii_digit(),
+            });
+        if !ok {
+            return Err(MacflyError::PlanError(format!(
+                "`--since` erwartet JJJJ-MM-TT, bekam '{d}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn handle_photos(cli: &Cli, action: &PhotosAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+    let adapter = PhotosAdapter::new(cfg.script_timeout_secs);
+
+    match action {
+        PhotosAction::Albums => {
+            let res = adapter.albums()?;
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!("Alben ({}):", res.total_albums);
+                    for a in &res.albums {
+                        println!("  {} ({})", a.name, a.count);
+                    }
+                }
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        PhotosAction::List {
+            album,
+            keyword,
+            since,
+            limit,
+        } => {
+            validate_since(since.as_deref())?;
+            let res = adapter.list(
+                profile,
+                album.as_deref(),
+                keyword.as_deref(),
+                since.as_deref(),
+                *limit,
+            )?;
+            match cli.format {
+                OutputFormat::Pretty => {
+                    println!("{} von {} Treffern:", res.returned, res.total_matched);
+                    for p in &res.items {
+                        println!(
+                            "  {}  {}  {}{}",
+                            p.date.as_deref().unwrap_or("(ohne Datum)"),
+                            p.filename,
+                            p.title.as_deref().unwrap_or(""),
+                            if p.keywords.is_empty() {
+                                String::new()
+                            } else {
+                                format!("  [{}]", p.keywords.join(", "))
+                            }
+                        );
+                    }
+                }
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        PhotosAction::Export {
+            to,
+            album,
+            keyword,
+            since,
+            ids,
+            limit,
+            originals,
+            sidecar,
+            convert,
+            max_size,
+            quality,
+        } => {
+            validate_since(since.as_deref())?;
+            if convert.is_none() && (max_size.is_some() || quality.is_some()) {
+                return Err(MacflyError::PlanError(
+                    "`--max-size` und `--quality` brauchen `--convert`".to_string(),
+                ));
+            }
+            let (media_ids, label) = if !ids.is_empty() {
+                (ids.clone(), Lang::detect().t("Einzelauswahl", "Selection"))
+            } else {
+                if album.is_none() && keyword.is_none() && since.is_none() {
+                    return Err(MacflyError::PlanError(
+                        "Bitte die Auswahl eingrenzen: `--album`, `--keyword`, `--since` oder `--id` (kein versehentlicher Export der ganzen Mediathek)."
+                            .to_string(),
+                    ));
+                }
+                let res = adapter.list(
+                    profile,
+                    album.as_deref(),
+                    keyword.as_deref(),
+                    since.as_deref(),
+                    *limit,
+                )?;
+                if res.items.is_empty() {
+                    return Err(MacflyError::PlanError(
+                        "Keine passenden Fotos gefunden".to_string(),
+                    ));
+                }
+                let label = match album {
+                    Some(a) => format!("Album '{a}'"),
+                    None => Lang::detect().t("Mediathek, gefiltert", "filtered library"),
+                };
+                (res.items.into_iter().map(|i| i.id).collect(), label)
+            };
+
+            let count = media_ids.len();
+            let store = PlanStore::default_store();
+            let proposal = PlanProposal {
+                schema_version: "1.0".to_string(),
+                summary: Some(match Lang::detect() {
+                    Lang::De => format!("{count} Foto(s) exportieren nach '{to}'"),
+                    Lang::En => format!("Export {count} photo(s) to '{to}'"),
+                }),
+                operations: vec![PlanOperation::PhotosExport {
+                    media_ids,
+                    destination: to.clone(),
+                    originals: *originals,
+                    sidecar: (*sidecar).into(),
+                    convert: convert.map(|c| PhotoConvert {
+                        format: c.into(),
+                        max_size: *max_size,
+                        quality: *quality,
+                    }),
+                    label: Some(label),
+                }],
+            };
+            let plan = store.create(profile_name, profile, proposal, 900)?;
+            emit_plan(cli, &plan)?;
+            Ok(())
+        }
+    }
 }
 
 fn handle_safari(cli: &Cli, action: &SafariAction) -> Result<(), MacflyError> {
@@ -2202,8 +2570,9 @@ fn handle_safari(cli: &Cli, action: &SafariAction) -> Result<(), MacflyError> {
                     "Keine passenden offenen Safari-Tabs gefunden".to_string(),
                 ));
             }
-            let note_title =
-                title.clone().unwrap_or_else(|| format!("Safari Tabs ({} Links)", res.total_tabs));
+            let note_title = title
+                .clone()
+                .unwrap_or_else(|| format!("Safari Tabs ({} Links)", res.total_tabs));
             let body: String = res
                 .tabs
                 .iter()

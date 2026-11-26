@@ -5,5 +5,6 @@ pub mod executor;
 pub mod jxa;
 pub mod mail;
 pub mod notes;
+pub mod photos;
 pub mod safari;
 pub mod shortcuts;

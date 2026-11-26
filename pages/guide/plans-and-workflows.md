@@ -20,9 +20,11 @@ them need you depends on the profile's [security preset](#security-presets).
 3. **Approve (only for `pending_approval`):** `macfly plan approve <plan-id>`
    requires an interactive terminal, shows the full preview and asks you to type
    a random 6-character code that is only shown there — never in plan output,
-   JSON or MCP responses.
+   JSON or MCP responses. Once the code is right, the plan is applied
+   immediately; `--no-apply` only approves it.
 4. **Apply (with lock & `--resume`):** `macfly plan apply <plan-id>` (or
-   `plan_apply` over MCP) runs only approved plans. It acquires an
+   `plan_apply` over MCP) runs only approved plans, for example those approved by the
+   preset or with `approve --no-apply`. It acquires an
    exclusive `.lock` file against duplicate runs, re-verifies plan integrity and
    optional note revisions, executes operations sequentially while persisting
    progress after each step, and appends a record to

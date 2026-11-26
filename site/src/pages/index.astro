@@ -125,8 +125,7 @@ macfly skill export --output ./.claude/skills/macfly
 # 3. Low-risk changes run under your preset — review & approve the rest
 macfly plan list
 macfly plan inspect <plan-id>
-macfly plan approve <plan-id>
-macfly plan apply <plan-id>`;
+macfly plan approve <plan-id>   # approves and applies`;
 ---
 
 <Base>
@@ -266,7 +265,7 @@ macfly plan apply <plan-id>`;
       },
       {
         label: '2 · Plan',
-        artifact: '20 MCP tools / CLI',
+        artifact: '22 MCP tools / CLI',
         title: 'Your AI proposes steps',
         body: 'Claude, Codex, Cursor, or Ollama reads DLP-filtered context and submits a typed change plan.',
       },
@@ -326,7 +325,7 @@ macfly plan apply <plan-id>`;
   <Facts
     items={[
       { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
-      { value: '20 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
+      { value: '22 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
       { value: '3 presets', label: 'strict, balanced or open — one choice instead of a rulebook, explained by `macfly policy`' },
       { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}

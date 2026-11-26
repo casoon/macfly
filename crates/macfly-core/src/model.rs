@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::io::Read;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -272,6 +274,60 @@ pub struct SafariTabsResult {
     pub tabs: Vec<SafariTab>,
 }
 
+// ---------- Apple Photos ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhotoAlbum {
+    pub id: String,
+    pub name: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhotosAlbumsResult {
+    pub schema_version: String,
+    pub total_albums: usize,
+    pub albums: Vec<PhotoAlbum>,
+}
+
+/// Metadaten eines Fotos oder Videos, soweit Apple Photos sie per Skript herausgibt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhotoItem {
+    pub id: String,
+    pub filename: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Aufnahmedatum als ISO-8601 (UTC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub altitude: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhotosListResult {
+    pub schema_version: String,
+    pub total_matched: usize,
+    pub returned: usize,
+    pub items: Vec<PhotoItem>,
+}
+
 // ---------- Context Packs ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,4 +396,23 @@ pub fn compute_sha256_hex(input: &str) -> String {
     hasher.update(input.as_bytes());
     let digest = hasher.finalize();
     digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// SHA-256 einer Datei, gelesen in Blöcken (Fotos und Videos können groß sein).
+pub fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }

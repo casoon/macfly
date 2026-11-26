@@ -7,9 +7,10 @@ use macfly_core::model::{
     NotesOverview, PersonContext, ShortcutsListResult, WeeklyReviewContext,
 };
 use macfly_core::plan::{PlanStatus, RiskLevel, StoredPlan};
+use macfly_core::plan_text::{Lang, plan_steps, risk_label, undo_label};
 use runemark::{
-    ColorMode, Console, DetailLevel, ErrorBlock, Finding, FindingGroup, Metric, NextStep, Report,
-    Tone, Verdict,
+    ColorMode, Console, DetailLevel, ErrorBlock, Finding, FindingGroup, Group, Item, Menu, Metric,
+    NextStep, Outcome, Report, SelectMode, Tone, Verdict,
 };
 
 pub fn render_error(err: &MacflyError, color: ColorMode) {
@@ -196,9 +197,15 @@ pub fn render_notes_audit(rep: &NotesAuditReport, detailed: bool, color: ColorMo
             Some("Run `macfly notes audit --details` to list all items.".to_string())
         })
         .add_metric(Metric::new("Profile", &rep.profile))
-        .add_metric(Metric::new("Folders", rep.total_folders_scanned.to_string()))
+        .add_metric(Metric::new(
+            "Folders",
+            rep.total_folders_scanned.to_string(),
+        ))
         .add_metric(Metric::new("Notes", rep.total_notes_scanned.to_string()))
-        .add_metric(Metric::new("Empty folders", rep.empty_folders.len().to_string()))
+        .add_metric(Metric::new(
+            "Empty folders",
+            rep.empty_folders.len().to_string(),
+        ))
         .add_metric(Metric::new(
             "Single-note folders",
             rep.single_note_folders.len().to_string(),
@@ -490,20 +497,111 @@ fn list_or_dash(items: &[String]) -> String {
     }
 }
 
-pub fn render_apply_report(rep: &ApplyReport, color: ColorMode) {
+/// Freigabe-Ansicht: der Ablauf in wenigen Schritten, Inhalte zum Prüfen vollständig.
+/// Mit `details` zusätzlich alle Einzelheiten und die technischen Angaben.
+pub fn render_plan_for_approval(plan: &StoredPlan, color: ColorMode, lang: Lang, details: bool) {
+    let console = Console::stdout(color);
+    let risk_tone = match plan.risk_level {
+        RiskLevel::Low => Tone::Success,
+        RiskLevel::Medium => Tone::Warning,
+        RiskLevel::High => Tone::Error,
+    };
+    let title = format!("{} {}", lang.t("Freigabe:", "Approval:"), plan.summary);
+    let mut report = Report::new(title, Verdict::ActionRequired)
+        .with_detail_level(DetailLevel::Detailed)
+        .add_metric(
+            Metric::new(lang.t("Risiko", "Risk"), risk_label(plan.risk_level, lang))
+                .with_tone(risk_tone),
+        )
+        .add_metric(Metric::new(
+            lang.t("Rückgängig machbar", "Can be undone"),
+            undo_label(plan.reversibility, lang),
+        ));
+
+    let steps = plan_steps(&plan.operations, lang);
+    let mut group = FindingGroup::new(lang.t("Das wird gemacht", "What will happen"))
+        .with_total_count(steps.len());
+    for (i, step) in steps.iter().enumerate() {
+        let mut text = format!("{}. {}", i + 1, step.title);
+        for note in &step.notes {
+            text.push_str("\n     ");
+            text.push_str(note);
+        }
+        let tone = if step.high_risk {
+            Tone::Warning
+        } else {
+            Tone::Info
+        };
+        group = group.add_finding(Finding::new(tone, text));
+    }
+    report = report.add_group(group);
+
+    if details {
+        let mut all = FindingGroup::new(lang.t("Alle Einzelheiten", "All details"))
+            .with_total_count(plan.operations.len());
+        for op in &plan.operations {
+            all = all.add_finding(Finding::new(Tone::Info, op.detailed_preview().join("\n")));
+        }
+        report = report
+            .add_group(all)
+            .add_metric(Metric::new("Plan", &plan.plan_id))
+            .add_metric(Metric::new("Hash", &plan.plan_hash));
+    } else {
+        report = report.add_next_step(
+            NextStep::new(lang.t("Alle Einzelheiten ansehen", "See every detail"))
+                .with_command(format!("macfly plan approve {} --details", plan.plan_id)),
+        );
+    }
+    print!("{}", report.render(console));
+}
+
+/// Ergebnis-Ansicht: pro Schritt eine Zeile, technische Angaben nur mit `details`.
+pub fn render_apply_report(
+    rep: &ApplyReport,
+    plan: &StoredPlan,
+    color: ColorMode,
+    lang: Lang,
+    details: bool,
+) {
     let console = Console::stdout(color);
     let verdict = match rep.status {
         PlanStatus::Applied => Verdict::Passed,
         PlanStatus::PartiallyApplied => Verdict::Warning,
         _ => Verdict::Failed,
     };
-    let mut report = Report::new(format!("Plan Applied: {}", rep.plan_id), verdict)
-        .with_detail_level(DetailLevel::Detailed)
-        .add_metric(Metric::new("Succeeded", format!("{}/{}", rep.succeeded_count, rep.total_ops)))
-        .add_metric(Metric::new("Skipped (resumed)", rep.skipped_count.to_string()));
-    let mut group = FindingGroup::new("Results").with_total_count(rep.results.len());
-    for line in &rep.results {
-        group = group.add_finding(Finding::new(Tone::Success, line.clone()));
+    let title = format!("{} {}", lang.t("Erledigt:", "Done:"), plan.summary);
+    let mut report = Report::new(title, verdict).with_detail_level(DetailLevel::Detailed);
+    if rep.skipped_count > 0 {
+        report = report.add_metric(Metric::new(
+            lang.t("Schon vorher erledigt", "Already done before"),
+            rep.skipped_count.to_string(),
+        ));
+    }
+
+    let steps = plan_steps(&plan.operations, lang);
+    let mut group = FindingGroup::new(lang.t("Was passiert ist", "What happened"))
+        .with_total_count(steps.len());
+    for step in &steps {
+        let mut text = step.title.clone();
+        // Ein einzelner Schritt darf seine erste Ergebniszeile als Klartext mitbringen (Fotos-Export).
+        if step.ops.len() == 1
+            && let Some(msg) = rep.results.get(step.ops.start)
+            && let Some((friendly, _)) = msg.split_once('\n')
+        {
+            text.push_str("\n     ");
+            text.push_str(friendly);
+        }
+        if details {
+            for idx in step.ops.clone() {
+                if let Some(line) = rep.results.get(idx) {
+                    for l in line.lines() {
+                        text.push_str("\n     · ");
+                        text.push_str(l);
+                    }
+                }
+            }
+        }
+        group = group.add_finding(Finding::new(Tone::Success, text));
     }
     report = report.add_group(group);
     print!("{}", report.render(console));
@@ -682,7 +780,10 @@ pub fn render_contacts_audit(rep: &ContactsAuditReport, detailed: bool, color: C
         } else {
             Some("Run `macfly contacts audit --details` to list all items.".to_string())
         })
-        .add_metric(Metric::new("Total contacts", rep.total_contacts.to_string()))
+        .add_metric(Metric::new(
+            "Total contacts",
+            rep.total_contacts.to_string(),
+        ))
         .add_metric(Metric::new(
             "Duplicate names",
             rep.duplicate_names.len().to_string(),
@@ -697,8 +798,8 @@ pub fn render_contacts_audit(rep: &ContactsAuditReport, detailed: bool, color: C
         ));
 
     if !rep.duplicate_names.is_empty() {
-        let mut g =
-            FindingGroup::new("Duplicate contact names").with_total_count(rep.duplicate_names.len());
+        let mut g = FindingGroup::new("Duplicate contact names")
+            .with_total_count(rep.duplicate_names.len());
         for (name, count) in &rep.duplicate_names {
             g = g.add_finding(Finding::new(Tone::Warning, format!("'{name}' ({count}x)")));
         }
@@ -722,7 +823,10 @@ pub fn render_contacts_audit(rep: &ContactsAuditReport, detailed: bool, color: C
             .with_advisory(true)
             .with_total_count(rep.empty_contacts.len());
         for c in &rep.empty_contacts {
-            g = g.add_finding(Finding::new(Tone::Info, format!("{} [id: {}]", c.name, c.id)));
+            g = g.add_finding(Finding::new(
+                Tone::Info,
+                format!("{} [id: {}]", c.name, c.id),
+            ));
         }
         report = report.add_group(g);
     }
@@ -744,7 +848,10 @@ pub fn render_person_context(ctx: &PersonContext, color: ColorMode) {
         .add_metric(Metric::new("Mails", ctx.recent_mails.len().to_string()))
         .add_metric(Metric::new("Notes", ctx.matching_notes.len().to_string()))
         .add_metric(Metric::new("Events", ctx.upcoming_events.len().to_string()))
-        .add_metric(Metric::new("Reminders", ctx.open_reminders.len().to_string()));
+        .add_metric(Metric::new(
+            "Reminders",
+            ctx.open_reminders.len().to_string(),
+        ));
 
     if !ctx.contacts.is_empty() {
         let mut g = FindingGroup::new("Contacts").with_total_count(ctx.contacts.len());
@@ -891,8 +998,14 @@ pub fn render_weekly_review(rev: &WeeklyReviewContext, color: ColorMode) {
     };
     let mut report = Report::new(format!("MacFly Weekly Review ({})", rev.profile), verdict)
         .with_detail_level(DetailLevel::Detailed)
-        .add_metric(Metric::new("Recent notes", rev.recent_notes.len().to_string()))
-        .add_metric(Metric::new("Unread mails", rev.unread_mails.len().to_string()))
+        .add_metric(Metric::new(
+            "Recent notes",
+            rev.recent_notes.len().to_string(),
+        ))
+        .add_metric(Metric::new(
+            "Unread mails",
+            rev.unread_mails.len().to_string(),
+        ))
         .add_metric(
             Metric::new("Overdue reminders", rev.overdue_reminders.len().to_string()).with_tone(
                 if rev.overdue_reminders.is_empty() {
@@ -955,10 +1068,43 @@ pub fn render_weekly_review(rev: &WeeklyReviewContext, color: ColorMode) {
         let mut g =
             FindingGroup::new("Open Safari tabs").with_total_count(rev.open_safari_tabs.len());
         for t in rev.open_safari_tabs.iter().take(10) {
-            g = g.add_finding(Finding::new(Tone::Muted, format!("{} — {}", t.title, t.url)));
+            g = g.add_finding(Finding::new(
+                Tone::Muted,
+                format!("{} — {}", t.title, t.url),
+            ));
         }
         report = report.add_group(g);
     }
 
     print!("{}", report.render(console));
+}
+
+/// One option of an interactive choice: id, label, description.
+pub type Choice<'a> = (&'a str, &'a str, &'a str);
+
+/// Interactive single choice (arrow keys, Enter). The cursor starts on the first entry, so list the
+/// default first. `Ok(None)` means the menu did not run (no terminal) or was cancelled with Esc.
+pub fn choose(
+    heading: &str,
+    note: &str,
+    choices: &[Choice<'_>],
+    color: ColorMode,
+) -> io::Result<Option<String>> {
+    let mut group = Group::new("");
+    for (id, label, description) in choices {
+        group = group.add_item(Item::new(*id, *label).with_description(*description));
+    }
+    let menu = Menu::new()
+        .with_heading(heading)
+        .with_note(note)
+        .add_group(group);
+    let outcome = menu.run(
+        Console::stderr(color),
+        SelectMode::Auto,
+        io::IsTerminal::is_terminal(&io::stderr()),
+    )?;
+    Ok(match outcome {
+        Outcome::Selected(id) => Some(id),
+        Outcome::Hotkey(_) | Outcome::Cancelled | Outcome::Unavailable => None,
+    })
 }

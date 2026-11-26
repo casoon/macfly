@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::calendar::RemindersAdapter;
 use crate::mail::MailAdapter;
 use crate::notes::NotesAdapter;
+use crate::photos::PhotosAdapter;
 use crate::shortcuts::ShortcutsAdapter;
 
 #[derive(Debug, Serialize)]
@@ -88,6 +89,7 @@ pub fn apply_approved_plan(
     let mail = MailAdapter::new(timeout_secs);
     let shortcuts = ShortcutsAdapter::new(timeout_secs);
     let reminders = RemindersAdapter::new(timeout_secs);
+    let photos = PhotosAdapter::new(timeout_secs);
 
     let total_ops = plan.operations.len();
     let mut skipped_count = 0usize;
@@ -117,6 +119,7 @@ pub fn apply_approved_plan(
                 shortcuts.run(profile_name, profile, name, input.as_deref())
             }
             PlanOperation::RemindersCreate { .. } => reminders.execute_operation(op),
+            PlanOperation::PhotosExport { .. } => photos.execute_operation(profile, op),
         };
 
         match outcome {

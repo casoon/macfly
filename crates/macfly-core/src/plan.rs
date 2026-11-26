@@ -98,6 +98,83 @@ pub enum PlanOperation {
         #[serde(default)]
         notes: Option<String>,
     },
+    /// Exportiert Fotos/Videos aus Apple Photos als neue Dateien (nie überschreibend).
+    PhotosExport {
+        media_ids: Vec<String>,
+        destination: String,
+        /// `true`: Originaldateien; `false`: gerenderte JPEGs mit Bearbeitungen.
+        #[serde(default)]
+        originals: bool,
+        #[serde(default)]
+        sidecar: SidecarFormat,
+        #[serde(default)]
+        convert: Option<PhotoConvert>,
+        /// Nur für die Vorschau, z. B. der Albumname.
+        #[serde(default)]
+        label: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SidecarFormat {
+    #[default]
+    None,
+    Xmp,
+    Json,
+    Both,
+}
+
+impl SidecarFormat {
+    pub fn xmp(self) -> bool {
+        matches!(self, Self::Xmp | Self::Both)
+    }
+
+    pub fn json(self) -> bool {
+        matches!(self, Self::Json | Self::Both)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageFormat {
+    Jpeg,
+    Png,
+    Tiff,
+    Heic,
+}
+
+impl ImageFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Jpeg => "jpg",
+            Self::Png => "png",
+            Self::Tiff => "tiff",
+            Self::Heic => "heic",
+        }
+    }
+
+    /// Wert für `sips -s format`.
+    pub fn sips_name(self) -> &'static str {
+        match self {
+            Self::Jpeg => "jpeg",
+            Self::Png => "png",
+            Self::Tiff => "tiff",
+            Self::Heic => "heic",
+        }
+    }
+}
+
+/// Umwandlung der exportierten Bildkopien mit dem macOS-Bordmittel `sips`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhotoConvert {
+    pub format: ImageFormat,
+    /// Längste Kante in Pixeln (nur verkleinern).
+    #[serde(default)]
+    pub max_size: Option<u32>,
+    /// 1–100, nur für JPEG und HEIC.
+    #[serde(default)]
+    pub quality: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -179,6 +256,7 @@ pub const ACTION_RISKS: &[(&str, RiskLevel)] = &[
     ("mail_create_draft", RiskLevel::Low),
     ("mail_mark_read", RiskLevel::Low),
     ("reminders_create", RiskLevel::Low),
+    ("photos_export", RiskLevel::Medium),
     ("notes_append", RiskLevel::Medium),
     ("notes_move", RiskLevel::Medium),
     ("notes_move_folder_contents", RiskLevel::Medium),
@@ -230,7 +308,9 @@ impl PlanOperation {
             | Self::NotesMove { .. }
             | Self::NotesMoveFolderContents { .. }
             | Self::NotesDeleteEmptyFolder { .. }
-            | Self::MailMove { .. } => RiskLevel::Medium,
+            | Self::MailMove { .. }
+            // Schreibt private Fotos als Dateien auf die Platte, auch wenn nichts überschrieben wird.
+            | Self::PhotosExport { .. } => RiskLevel::Medium,
             // Kurzbefehle können beliebige Nebenwirkungen in macOS/externen Diensten auslösen.
             Self::ShortcutsRun { .. } => RiskLevel::High,
         }
@@ -335,6 +415,43 @@ impl PlanOperation {
                     }
                 }
             }
+            Self::PhotosExport {
+                media_ids,
+                destination,
+                originals,
+                sidecar,
+                convert,
+                label,
+            } => {
+                if let Some(l) = label {
+                    lines.push(format!("    Quelle:      {l}"));
+                }
+                lines.push(format!("    Anzahl:      {}", media_ids.len()));
+                lines.push(format!("    Ziel:        {destination}"));
+                lines.push(format!(
+                    "    Fassung:     {}",
+                    if *originals {
+                        "Originaldateien"
+                    } else {
+                        "gerenderte JPEGs (mit Bearbeitungen)"
+                    }
+                ));
+                lines.push(format!("    Metadaten:   {sidecar:?}"));
+                if let Some(c) = convert {
+                    let mut conv = format!("    Umwandlung:  {:?}", c.format);
+                    if let Some(m) = c.max_size {
+                        conv.push_str(&format!(", max. {m} px"));
+                    }
+                    if let Some(q) = c.quality {
+                        conv.push_str(&format!(", Qualität {q}"));
+                    }
+                    lines.push(conv);
+                }
+                lines.push(
+                    "    Bestehende Dateien werden nie überschrieben; Fotos in Apple Photos bleiben unverändert."
+                        .to_string(),
+                );
+            }
             _ => {}
         }
         lines
@@ -390,10 +507,7 @@ impl PlanOperation {
                 folder_name, folder_id
             ),
             Self::MailCreateDraft {
-                to,
-                subject,
-                body,
-                ..
+                to, subject, body, ..
             } => format!(
                 "[mail.create_draft] Entwurf an {} | Betreff: '{}' ({} Zeichen, KEIN Versand)",
                 to.join(", "),
@@ -428,6 +542,21 @@ impl PlanOperation {
                 Some(l) => format!("[reminders.create] Neue Erinnerung '{title}' in Liste '{l}'"),
                 None => format!("[reminders.create] Neue Erinnerung '{title}'"),
             },
+            Self::PhotosExport {
+                media_ids,
+                destination,
+                originals,
+                ..
+            } => format!(
+                "[photos.export] {} {} → '{}'",
+                media_ids.len(),
+                if *originals {
+                    "Original(e)"
+                } else {
+                    "gerenderte(s) Foto(s)"
+                },
+                destination
+            ),
         }
     }
 
@@ -566,6 +695,33 @@ impl PlanOperation {
                     return Err(MacflyError::PlanError(
                         "reminders.create benötigt einen nicht-leeren Titel".to_string(),
                     ));
+                }
+            }
+            Self::PhotosExport {
+                media_ids,
+                destination,
+                convert,
+                ..
+            } => {
+                if media_ids.is_empty() {
+                    return Err(MacflyError::PlanError(
+                        "photos.export benötigt mindestens eine Medien-ID".to_string(),
+                    ));
+                }
+                profile.export.check_destination(destination)?;
+                if let Some(c) = convert {
+                    if c.max_size == Some(0) {
+                        return Err(MacflyError::PlanError(
+                            "photos.export: `max_size` muss größer als 0 sein".to_string(),
+                        ));
+                    }
+                    if let Some(q) = c.quality
+                        && !(1..=100).contains(&q)
+                    {
+                        return Err(MacflyError::PlanError(
+                            "photos.export: `quality` muss zwischen 1 und 100 liegen".to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -981,6 +1137,14 @@ mod tests {
                 name: "X".to_string(),
                 input: None,
             },
+            PlanOperation::PhotosExport {
+                media_ids: vec!["A".to_string()],
+                destination: "~/Pictures/Export".to_string(),
+                originals: true,
+                sidecar: SidecarFormat::None,
+                convert: None,
+                label: None,
+            },
         ];
         for op in samples {
             let action = serde_json::to_value(&op).unwrap()["action"]
@@ -1072,5 +1236,50 @@ mod tests {
         };
         let note_lines = note.detailed_preview().join("\n");
         assert!(note_lines.contains("+ New bullet"));
+    }
+
+    #[test]
+    fn photos_export_checks_destination_and_options() {
+        let store = temp_store("photos");
+        let profile = ProfileConfig::default();
+        let op = |destination: &str, convert: Option<PhotoConvert>| PlanProposal {
+            schema_version: "1.0".to_string(),
+            summary: None,
+            operations: vec![PlanOperation::PhotosExport {
+                media_ids: vec!["ABC/L0/001".to_string()],
+                destination: destination.to_string(),
+                originals: true,
+                sidecar: SidecarFormat::Both,
+                convert,
+                label: Some("Belege".to_string()),
+            }],
+        };
+
+        let err = store
+            .create("default", &profile, op("~/Library/Mail", None), 600)
+            .unwrap_err();
+        assert_eq!(err.code(), "SCOPE_DENIED");
+
+        let bad_quality = PhotoConvert {
+            format: ImageFormat::Jpeg,
+            max_size: None,
+            quality: Some(0),
+        };
+        let err = store
+            .create(
+                "default",
+                &profile,
+                op("~/Pictures/Export", Some(bad_quality)),
+                600,
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), "PLAN_ERROR");
+
+        let plan = store
+            .create("default", &profile, op("~/Pictures/Export", None), 600)
+            .unwrap();
+        // Medium-Risiko: unter `balanced` ist eine Freigabe nötig.
+        assert_eq!(plan.risk_level, RiskLevel::Medium);
+        assert_eq!(plan.status, PlanStatus::PendingApproval);
     }
 }

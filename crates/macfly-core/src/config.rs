@@ -5,12 +5,16 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::MacflyError;
+use crate::plan_text::Lang;
 
 /// Single Point of Truth: `~/.config/macfly/config.json` (oder `$MACFLY_CONFIG`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_schema_version")]
     pub schema_version: String,
+    /// Sprache der Ausgaben: `en` (Standard) oder `de`.
+    #[serde(default)]
+    pub language: Lang,
     #[serde(default = "default_profile_name")]
     pub default_profile: String,
     #[serde(default = "default_timeout_secs")]
@@ -76,6 +80,16 @@ pub struct ProfileConfig {
     pub shortcuts: ShortcutsScopeConfig,
     #[serde(default)]
     pub dlp: DlpConfig,
+    #[serde(default)]
+    pub export: ExportScopeConfig,
+}
+
+/// Wohin Pläne Dateien schreiben dürfen (Foto-Export, später Mail-Anhänge).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExportScopeConfig {
+    /// Erlaubte Zielordner. Leer: nur unterhalb des Home-Ordners, nie in `~/Library`.
+    #[serde(default)]
+    pub allow_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -172,6 +186,7 @@ impl Default for ProfileConfig {
             mail: MailScopeConfig::default(),
             shortcuts: ShortcutsScopeConfig::default(),
             dlp: DlpConfig::default(),
+            export: ExportScopeConfig::default(),
         }
     }
 }
@@ -180,6 +195,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             schema_version: default_schema_version(),
+            language: Lang::default(),
             default_profile: default_profile_name(),
             script_timeout_secs: default_timeout_secs(),
             profiles: default_profiles(),
@@ -218,6 +234,7 @@ impl Config {
         path: Option<&Path>,
         force: bool,
         preset: Preset,
+        language: Lang,
     ) -> Result<PathBuf, MacflyError> {
         let cfg_path = path.map(PathBuf::from).unwrap_or_else(Self::default_path);
         if cfg_path.exists() && !force {
@@ -229,7 +246,10 @@ impl Config {
         if let Some(parent) = cfg_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut cfg = Self::default();
+        let mut cfg = Self {
+            language,
+            ..Self::default()
+        };
         for profile in cfg.profiles.values_mut() {
             profile.preset = preset;
         }
@@ -295,6 +315,67 @@ impl MailScopeConfig {
     }
 }
 
+impl ExportScopeConfig {
+    /// Prüft einen Zielordner rein lexikalisch (`~` wird aufgelöst, `..` ist verboten).
+    pub fn check_destination(&self, destination: &str) -> Result<PathBuf, MacflyError> {
+        let home = dirs::home_dir();
+        self.check_destination_in(destination, home.as_deref())
+    }
+
+    fn check_destination_in(
+        &self,
+        destination: &str,
+        home: Option<&Path>,
+    ) -> Result<PathBuf, MacflyError> {
+        let deny = |detail: String| Err(MacflyError::ScopeDenied(detail));
+        let raw = destination.trim();
+        let path = if let Some(rest) = raw.strip_prefix("~/") {
+            match home {
+                Some(h) => h.join(rest),
+                None => return deny("Home-Ordner nicht ermittelbar".to_string()),
+            }
+        } else {
+            PathBuf::from(raw)
+        };
+        if !path.is_absolute() {
+            return deny(format!("Zielordner '{raw}' muss ein absoluter Pfad sein"));
+        }
+        if path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return deny(format!("Zielordner '{raw}' darf kein '..' enthalten"));
+        }
+        if !self.allow_dirs.is_empty() {
+            let allowed = self.allow_dirs.iter().any(|a| {
+                let base = match a.strip_prefix("~/") {
+                    Some(rest) => home.map(|h| h.join(rest)),
+                    None => Some(PathBuf::from(a)),
+                };
+                base.is_some_and(|b| path.starts_with(b))
+            });
+            if !allowed {
+                return deny(format!(
+                    "Zielordner '{raw}' liegt außerhalb von `export.allow_dirs`"
+                ));
+            }
+            return Ok(path);
+        }
+        let Some(home) = home else {
+            return deny("Home-Ordner nicht ermittelbar".to_string());
+        };
+        if !path.starts_with(home) {
+            return deny(format!(
+                "Zielordner '{raw}' liegt außerhalb des Home-Ordners (erlaube ihn in `export.allow_dirs`)"
+            ));
+        }
+        if path.starts_with(home.join("Library")) {
+            return deny(format!("Zielordner '{raw}' liegt in ~/Library"));
+        }
+        Ok(path)
+    }
+}
+
 pub fn data_dir() -> PathBuf {
     if let Ok(env_dir) = std::env::var("MACFLY_DATA_DIR") {
         return PathBuf::from(env_dir);
@@ -349,4 +430,74 @@ fn default_profiles() -> BTreeMap<String, ProfileConfig> {
     let mut map = BTreeMap::new();
     map.insert("default".to_string(), ProfileConfig::default());
     map
+}
+
+#[cfg(test)]
+mod export_scope_tests {
+    use super::*;
+
+    fn home() -> PathBuf {
+        PathBuf::from("/Users/test")
+    }
+
+    #[test]
+    fn default_scope_allows_home_but_not_library_or_outside() {
+        let scope = ExportScopeConfig::default();
+        let h = home();
+        assert!(
+            scope
+                .check_destination_in("~/Pictures/Export", Some(&h))
+                .is_ok()
+        );
+        assert!(
+            scope
+                .check_destination_in("/Users/test/Desktop/x", Some(&h))
+                .is_ok()
+        );
+        assert!(
+            scope
+                .check_destination_in("~/Library/Preferences", Some(&h))
+                .is_err()
+        );
+        assert!(
+            scope
+                .check_destination_in("/Volumes/Backup/x", Some(&h))
+                .is_err()
+        );
+        assert!(scope.check_destination_in("/tmp/x", Some(&h)).is_err());
+    }
+
+    #[test]
+    fn rejects_relative_and_parent_paths() {
+        let scope = ExportScopeConfig::default();
+        let h = home();
+        assert!(scope.check_destination_in("Pictures/x", Some(&h)).is_err());
+        assert!(
+            scope
+                .check_destination_in("~/Pictures/../Library/x", Some(&h))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn allowlist_replaces_home_rule() {
+        let scope = ExportScopeConfig {
+            allow_dirs: vec![
+                "/Volumes/Backup".to_string(),
+                "~/Pictures/Export".to_string(),
+            ],
+        };
+        let h = home();
+        assert!(
+            scope
+                .check_destination_in("/Volumes/Backup/2026", Some(&h))
+                .is_ok()
+        );
+        assert!(
+            scope
+                .check_destination_in("~/Pictures/Export/a", Some(&h))
+                .is_ok()
+        );
+        assert!(scope.check_destination_in("~/Desktop", Some(&h)).is_err());
+    }
 }
