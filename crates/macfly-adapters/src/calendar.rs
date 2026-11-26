@@ -68,8 +68,12 @@ impl CalendarAdapter {
             "calendar": calendar,
             "limit": limit,
         });
-        let raw: RawCalendarResponse =
-            run_jxa("Apple Calendar", SCRIPT_CALENDAR, &payload, self.timeout_secs)?;
+        let raw: RawCalendarResponse = run_jxa(
+            "Apple Calendar",
+            SCRIPT_CALENDAR,
+            &payload,
+            self.timeout_secs,
+        )?;
         let returned = raw.events.len();
         Ok(CalendarEventsResult {
             schema_version: "1.0".to_string(),
@@ -97,8 +101,12 @@ impl RemindersAdapter {
             "overdue_only": overdue_only,
             "limit": limit,
         });
-        let raw: RawRemindersResponse =
-            run_jxa("Apple Reminders", SCRIPT_REMINDERS, &payload, self.timeout_secs)?;
+        let raw: RawRemindersResponse = run_jxa(
+            "Apple Reminders",
+            SCRIPT_REMINDERS,
+            &payload,
+            self.timeout_secs,
+        )?;
         let returned = raw.reminders.len();
         Ok(RemindersListResult {
             schema_version: "1.0".to_string(),

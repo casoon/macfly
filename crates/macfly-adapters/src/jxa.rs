@@ -30,7 +30,9 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| MacflyError::ScriptError(format!("osascript konnte nicht gestartet werden: {e}")))?;
+        .map_err(|e| {
+            MacflyError::ScriptError(format!("osascript konnte nicht gestartet werden: {e}"))
+        })?;
 
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(&payload)?;

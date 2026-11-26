@@ -51,8 +51,7 @@ Any shortcut not listed in `shortcuts.allow` is rejected immediately with
 
 ```bash
 macfly plan create --input focus.json
-macfly plan approve <plan-id>
-macfly plan apply <plan-id>
+macfly plan approve <plan-id>   # approves and runs it
 ```
 
 ## Example use cases

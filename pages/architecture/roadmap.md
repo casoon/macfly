@@ -40,7 +40,7 @@ order: 3
   (`strict` / `balanced` / `open`) with `macfly policy`, interactive approval
   with a random code, exclusive `.lock` files,
   `partially_applied` status with `--resume`, and JSONL audit journal
-- **Built-in `macfly mcp` (`stdio`) server** exposing 20 read, context-pack,
+- **Built-in `macfly mcp` (`stdio`) server** exposing 22 read, context-pack,
   plan-propose and apply-approved tools with protocol negotiation (up to `2026-07-28`) and MCP tool
   annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 - **Agent Skill Export & `launchd` scheduler:** `macfly skill export` and

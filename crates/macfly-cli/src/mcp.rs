@@ -8,6 +8,7 @@ use macfly_adapters::context::{
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
+use macfly_adapters::photos::PhotosAdapter;
 use macfly_adapters::safari::SafariAdapter;
 use macfly_adapters::shortcuts::ShortcutsAdapter;
 use macfly_core::config::{Config, ProfileConfig};
@@ -288,6 +289,24 @@ fn raw_tool_definitions() -> Value {
             }
         },
         {
+            "name": "photos_albums",
+            "description": "Listet die Alben in Apple Photos mit Anzahl der Fotos. Exportiert wird nur über `plan_create` (`photos_export`).",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "photos_list",
+            "description": "Listet Fotos und Videos aus Apple Photos mit Metadaten (ID, Dateiname, Titel, Beschreibung, Datum, Schlagwörter, Ort), neueste zuerst. Filter: `album`, `keyword`, `since` (JJJJ-MM-TT). Die `id` wird für `photos_export` benötigt.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "album": { "type": "string" },
+                    "keyword": { "type": "string" },
+                    "since": { "type": "string" },
+                    "limit": { "type": "integer", "default": 50 }
+                }
+            }
+        },
+        {
             "name": "context_daily_brief",
             "description": "4-App Morgen-/Tagesbriefing: Termine (48h), offene Erinnerungen, ungelesene E-Mails und kürzlich geänderte Notizen.",
             "inputSchema": { "type": "object", "properties": {} }
@@ -321,7 +340,7 @@ fn raw_tool_definitions() -> Value {
         },
         {
             "name": "plan_create",
-            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft). Führt NICHT direkt aus. Je nach Sicherheitsstufe des Profils ist der Plan sofort freigegeben (status `approved`, dann `plan_apply` aufrufen) oder wartet auf die Freigabe des Nutzers im Terminal (status `pending_approval`, dann dem Nutzer `macfly plan approve <plan_id>` nennen).",
+            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft, photos_export). Führt NICHT direkt aus. Je nach Sicherheitsstufe des Profils ist der Plan sofort freigegeben (status `approved`, dann `plan_apply` aufrufen) oder wartet auf die Freigabe des Nutzers im Terminal (status `pending_approval`, dann dem Nutzer `macfly plan approve <plan_id>` nennen; die Freigabe führt den Plan sofort aus).",
             "inputSchema": {
                 "type": "object",
                 "required": ["operations"],
@@ -476,6 +495,22 @@ fn dispatch_tool(
             let query = args.get("query").and_then(Value::as_str);
             Ok(serde_json::to_value(sf.tabs(query)?)?)
         }
+        "photos_albums" => {
+            let ph = PhotosAdapter::new(cfg.script_timeout_secs);
+            Ok(serde_json::to_value(ph.albums()?)?)
+        }
+        "photos_list" => {
+            let ph = PhotosAdapter::new(cfg.script_timeout_secs);
+            let text = |key: &str| args.get(key).and_then(Value::as_str);
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+            Ok(serde_json::to_value(ph.list(
+                profile,
+                text("album"),
+                text("keyword"),
+                text("since"),
+                limit,
+            )?)?)
+        }
         "context_daily_brief" => Ok(serde_json::to_value(build_daily_brief(
             profile_name,
             profile,
@@ -569,7 +604,7 @@ mod tests {
     fn mcp_tools_have_annotations_and_never_expose_approve() {
         let tools = tool_definitions();
         let arr = tools.as_array().expect("tools must be an array");
-        assert_eq!(arr.len(), 20);
+        assert_eq!(arr.len(), 22);
         for tool in arr {
             let name = tool["name"].as_str().unwrap();
             assert_ne!(name, "plan_approve");

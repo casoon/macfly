@@ -308,7 +308,9 @@ impl NotesAdapter {
         )?;
 
         if !raw.found {
-            return Err(MacflyError::NotFound(format!("Notiz '{id}' nicht gefunden")));
+            return Err(MacflyError::NotFound(format!(
+                "Notiz '{id}' nicht gefunden"
+            )));
         }
 
         let account = raw.account.unwrap_or_default();

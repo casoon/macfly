@@ -324,9 +324,7 @@ impl MailAdapter {
                         signature_name.as_deref().or(name.as_deref()),
                         None,
                     ),
-                    MailSignatureConfig::Inline { text } => {
-                        ("inline", None, Some(text.as_str()))
-                    }
+                    MailSignatureConfig::Inline { text } => ("inline", None, Some(text.as_str())),
                     MailSignatureConfig::None => ("none", None, None),
                 };
                 serde_json::json!({

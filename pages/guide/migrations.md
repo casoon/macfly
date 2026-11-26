@@ -109,12 +109,11 @@ macfly notes import --input ./notion-database.csv --folder "30 · Research"
 ```
 
 MacFly prints the generated `plan_id` and its status. Review, approve
-(if `pending_approval`) and apply it:
+(if `pending_approval`); approving also applies it:
 
 ```bash
 macfly plan inspect <plan-id>
 macfly plan approve <plan-id>
-macfly plan apply <plan-id>
 ```
 
 ### Example: Migrate tasks from Todoist / Trello CSV or Markdown into Apple Reminders
@@ -123,6 +122,29 @@ macfly plan apply <plan-id>
 macfly reminders import --input ./todoist-export.csv --list "Work"
 macfly reminders import --input ./roadmap-checklist.md --list "Projects"
 ```
+
+### Example: Export photos from Apple Photos
+
+`macfly photos export` always goes through a plan. It exports into a new
+folder and never overwrites a file, so running it twice is safe.
+
+```sh
+macfly photos albums
+macfly photos list --album "Receipts" --since 2024-01-01
+
+# Originals plus an XMP file per photo (title, description, keywords, date, location)
+macfly photos export --album "Receipts" --to ~/Pictures/Export --originals --sidecar xmp
+
+# Rendered copies, converted with the built-in `sips`: JPEG, at most 2048 px, quality 85
+macfly photos export --keyword invoice --to ~/Pictures/Web \
+  --convert jpeg --max-size 2048 --quality 85
+```
+
+- `--originals` exports the file as imported (HEIC, RAW, …); without it Photos renders JPEGs with your edits.
+- `--sidecar xmp|json|both` writes the metadata Photos exposes to scripts next to each file. Photos' own "export IPTC as XMP" switch is not reachable from a script, so the XMP is written by MacFly.
+- `--convert` runs on the exported copies only and never touches your library. It only shrinks larger images, and videos are copied unchanged.
+- Destinations must be below your home folder (not `~/Library`) unless `export.allow_dirs` in the config says otherwise.
+- Each run writes a `macfly-export-<id>.sha256` manifest that `shasum -a 256 -c` can verify.
 
 ### Example: Capture open Safari tabs directly into an Apple Note
 

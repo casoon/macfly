@@ -76,6 +76,8 @@ args = ["mcp", "--profile", "default"]
 | `calendar_events` | Read | Upcoming events for the next N days |
 | `reminders_list` | Read | Open or overdue reminders |
 | `safari_tabs` | Read | Currently open Safari browser tabs (title & URL) |
+| `photos_albums` | Read | Apple Photos albums with photo counts |
+| `photos_list` | Read | Photos and videos with metadata (ID, filename, title, description, date, keywords, location); filter by album, keyword, date |
 | `shortcuts_list` | Read | Available macOS Shortcuts & allowlist status |
 | `context_daily_brief` | Read | 4-app morning briefing (events 48h, reminders, unread mails, recent notes) |
 | `context_person` | Read | 360° dossier for a person/company across Contacts, Mail, Notes, Calendar & Reminders |
@@ -106,12 +108,11 @@ are approved automatically is decided by the profile's
   come back from `plan_create` with `"status": "approved"`; the agent runs them
   with `plan_apply`.
 - **Everything else** comes back as `"status": "pending_approval"`. You review
-  and approve it in your own terminal, then the agent (or you) applies it:
+  and approve it in your own terminal; approving applies the plan right away:
 
 ```bash
 macfly plan inspect <plan-id>
 macfly plan approve <plan-id>
-macfly plan apply <plan-id>
 ```
 
 Run `macfly policy --profile <name>` to see exactly what an MCP profile may do.

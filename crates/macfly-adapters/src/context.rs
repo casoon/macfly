@@ -1,7 +1,6 @@
 use macfly_core::config::ProfileConfig;
 use macfly_core::model::{
-    CalendarEvent, DailyBrief, MeetingPrepContext, PersonContext, ReminderItem,
-    WeeklyReviewContext,
+    CalendarEvent, DailyBrief, MeetingPrepContext, PersonContext, ReminderItem, WeeklyReviewContext,
 };
 use macfly_core::plan::now_unix;
 
