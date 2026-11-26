@@ -1097,6 +1097,7 @@ pub fn choose(
     let menu = Menu::new()
         .with_heading(heading)
         .with_note(note)
+        .with_wrapped_descriptions()
         .add_group(group);
     let outcome = menu.run(
         Console::stderr(color),
