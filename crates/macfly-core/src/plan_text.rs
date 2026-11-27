@@ -304,6 +304,19 @@ fn describe(slice: &[PlanOperation], lang: Lang) -> (String, Vec<String>) {
                 limited(lang, lines),
             )
         }
+        PlanOperation::MusicPlaylistAdd {
+            playlist,
+            track_ids,
+        } => (
+            match lang {
+                Lang::De => format!(
+                    "{} Titel zur Playlist '{playlist}' hinzufügen",
+                    track_ids.len()
+                ),
+                Lang::En => format!("Add {} tracks to playlist '{playlist}'", track_ids.len()),
+            },
+            Vec::new(),
+        ),
         PlanOperation::PhotosExport {
             media_ids,
             destination,

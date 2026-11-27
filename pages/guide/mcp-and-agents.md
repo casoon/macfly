@@ -60,7 +60,7 @@ args = ["mcp", "--profile", "default"]
 }
 ```
 
-## Available MCP tools (20 total)
+## Available MCP tools (25 total)
 
 | Tool | Scope | Purpose |
 |---|---|---|
@@ -78,6 +78,9 @@ args = ["mcp", "--profile", "default"]
 | `safari_tabs` | Read | Currently open Safari browser tabs (title & URL) |
 | `photos_albums` | Read | Apple Photos albums with photo counts |
 | `photos_list` | Read | Photos and videos with metadata (ID, filename, title, description, date, keywords, location); filter by album, keyword, date |
+| `music_playlists` | Read | Apple Music playlists with type (playlist · smart · folder) and track count |
+| `music_tracks` | Read | Library or playlist tracks with persistent ID (for `music_playlist_add`), artist, album, genre, year |
+| `music_stats` | Read | Listening statistics from play counters: top tracks/artists/albums/genres, most skipped, rediscover, never played |
 | `shortcuts_list` | Read | Available macOS Shortcuts & allowlist status |
 | `context_daily_brief` | Read | 4-app morning briefing (events 48h, reminders, unread mails, recent notes) |
 | `context_person` | Read | 360° dossier for a person/company across Contacts, Mail, Notes, Calendar & Reminders |

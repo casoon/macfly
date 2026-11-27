@@ -14,6 +14,7 @@ use macfly_adapters::context::{
 };
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
+use macfly_adapters::music::MusicAdapter;
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::photos::PhotosAdapter;
 use macfly_adapters::safari::SafariAdapter;
@@ -120,6 +121,11 @@ enum Commands {
     Reminders {
         #[command(subcommand)]
         action: RemindersAction,
+    },
+    /// Apple Music: Playlists und Titel lesen, Playlists per Plan anlegen/befüllen
+    Music {
+        #[command(subcommand)]
+        action: MusicAction,
     },
     /// Apple Shortcuts (Kurzbefehle) einsehen (Ausführung nur über allowlist-geprüften Plan)
     Shortcuts {
@@ -364,6 +370,39 @@ enum RemindersAction {
         input: PathBuf,
         #[arg(long)]
         list: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum MusicAction {
+    /// Playlists der Mediathek auflisten
+    Playlists,
+    /// Titel der Mediathek oder einer Playlist auflisten (inkl. Track-ID)
+    Tracks {
+        #[arg(long)]
+        playlist: Option<String>,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+    /// Hörstatistik aus den Zählern der Mediathek (Top-Listen, Übersprungenes, lange nicht gehört, nie gespielt)
+    Stats {
+        /// Länge der Top-Listen
+        #[arg(long, default_value_t = 20)]
+        top: usize,
+        /// Ab wie vielen Tagen ohne Wiedergabe ein Titel als „lange nicht gehört“ gilt
+        #[arg(long, default_value_t = 365)]
+        stale_days: u64,
+        /// Alle Titel mit Zählern zusätzlich als CSV schreiben (z. B. für Numbers/Excel)
+        #[arg(long)]
+        csv: Option<PathBuf>,
+    },
+    /// Erstellt einen Plan (`music_playlist_add`): Playlist anlegen (falls nötig) und Titel per ID hinzufügen
+    Add {
+        #[arg(long)]
+        playlist: String,
+        /// Track-IDs aus `macfly music tracks`
+        #[arg(required = true)]
+        track_ids: Vec<String>,
     },
 }
 
@@ -693,6 +732,7 @@ fn run(cli: &Cli) -> Result<(), MacflyError> {
         Commands::Mail { action } => handle_mail(cli, action),
         Commands::Calendar { action } => handle_calendar(cli, action),
         Commands::Reminders { action } => handle_reminders(cli, action),
+        Commands::Music { action } => handle_music(cli, action),
         Commands::Shortcuts { action } => handle_shortcuts(cli, action),
         Commands::Contacts { action } => handle_contacts(cli, action),
         Commands::Safari { action } => handle_safari(cli, action),
@@ -1763,6 +1803,95 @@ fn handle_reminders(cli: &Cli, action: &RemindersAction) -> Result<(), MacflyErr
             Ok(())
         }
     }
+}
+
+fn handle_music(cli: &Cli, action: &MusicAction) -> Result<(), MacflyError> {
+    let (cfg, _, _) = Config::load_or_default(cli.config.as_deref())?;
+    let (profile_name, profile) = cfg.profile(cli.profile.as_deref())?;
+    let adapter = MusicAdapter::new(cfg.script_timeout_secs);
+    match action {
+        MusicAction::Playlists => {
+            let res = adapter.playlists()?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_music_playlists(&res, cli.color.into()),
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        MusicAction::Tracks { playlist, limit } => {
+            let res = adapter.tracks(playlist.as_deref(), *limit)?;
+            match cli.format {
+                OutputFormat::Pretty => ui::render_music_tracks(&res, cli.color.into()),
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        MusicAction::Stats {
+            top,
+            stale_days,
+            csv,
+        } => {
+            let res = adapter.stats(*top, *stale_days)?;
+            if let Some(path) = csv {
+                write_music_csv(path, &res.all)?;
+            }
+            match cli.format {
+                OutputFormat::Pretty => ui::render_music_stats(&res, *stale_days, cli.color.into()),
+                _ => emit_json(cli.format, &res)?,
+            }
+            Ok(())
+        }
+        MusicAction::Add {
+            playlist,
+            track_ids,
+        } => {
+            let store = PlanStore::default_store();
+            let proposal = PlanProposal {
+                schema_version: "1.0".to_string(),
+                summary: Some(format!(
+                    "{} Titel zur Playlist '{playlist}'",
+                    track_ids.len()
+                )),
+                operations: vec![PlanOperation::MusicPlaylistAdd {
+                    playlist: playlist.clone(),
+                    track_ids: track_ids.clone(),
+                }],
+            };
+            let plan = store.create(profile_name, profile, proposal, 900)?;
+            emit_plan(cli, &plan)?;
+            Ok(())
+        }
+    }
+}
+
+fn write_music_csv(
+    path: &std::path::Path,
+    tracks: &[macfly_adapters::music::MusicTrackStat],
+) -> Result<(), MacflyError> {
+    fn q(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+    let mut out = String::from(
+        "id,title,artist,album,genre,played_count,skipped_count,last_played,added_at,rating,duration_secs\n",
+    );
+    for t in tracks {
+        out.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{}\n",
+            t.id,
+            q(&t.title),
+            q(&t.artist),
+            q(&t.album),
+            q(&t.genre),
+            t.played_count,
+            t.skipped_count,
+            t.last_played.as_deref().unwrap_or(""),
+            t.added_at.as_deref().unwrap_or(""),
+            t.rating,
+            t.duration_secs
+        ));
+    }
+    fs::write(path, out)?;
+    Ok(())
 }
 
 fn handle_shortcuts(cli: &Cli, action: &ShortcutsAction) -> Result<(), MacflyError> {

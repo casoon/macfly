@@ -7,6 +7,7 @@ use macfly_adapters::context::{
 };
 use macfly_adapters::executor::apply_approved_plan;
 use macfly_adapters::mail::{ListMailQuery, MailAdapter};
+use macfly_adapters::music::MusicAdapter;
 use macfly_adapters::notes::{ListNotesQuery, NotesAdapter};
 use macfly_adapters::photos::PhotosAdapter;
 use macfly_adapters::safari::SafariAdapter;
@@ -289,6 +290,33 @@ fn raw_tool_definitions() -> Value {
             }
         },
         {
+            "name": "music_playlists",
+            "description": "Listet die Playlists in Apple Music (Typ playlist/smart/folder, Anzahl Titel). Befüllt wird nur über `plan_create` (`music_playlist_add`).",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "music_tracks",
+            "description": "Listet Titel der Mediathek oder einer Playlist mit persistenter Track-ID (für `music_playlist_add`), Interpret, Album, Genre, Jahr.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "playlist": { "type": "string" },
+                    "limit": { "type": "integer", "default": 100 }
+                }
+            }
+        },
+        {
+            "name": "music_stats",
+            "description": "Hörstatistik aus den Zählern der Apple-Music-Mediathek: Top-Titel/-Interpreten/-Alben/-Genres, meist übersprungen, früher oft gehört aber seit `stale_days` nicht mehr, nie gespielt. Kein Hörverlauf mit Zeitpunkten.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "top": { "type": "integer", "default": 20 },
+                    "stale_days": { "type": "integer", "default": 365 }
+                }
+            }
+        },
+        {
             "name": "photos_albums",
             "description": "Listet die Alben in Apple Photos mit Anzahl der Fotos. Exportiert wird nur über `plan_create` (`photos_export`).",
             "inputSchema": { "type": "object", "properties": {} }
@@ -340,7 +368,7 @@ fn raw_tool_definitions() -> Value {
         },
         {
             "name": "plan_create",
-            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft, photos_export). Führt NICHT direkt aus. Je nach Sicherheitsstufe des Profils ist der Plan sofort freigegeben (status `approved`, dann `plan_apply` aufrufen) oder wartet auf die Freigabe des Nutzers im Terminal (status `pending_approval`, dann dem Nutzer `macfly plan approve <plan_id>` nennen; die Freigabe führt den Plan sofort aus).",
+            "description": "Erstellt einen geprüften Änderungsplan (z. B. notes_move, notes_create, notes_delete_empty_folder, mail_create_draft, photos_export, music_playlist_add). Führt NICHT direkt aus. Je nach Sicherheitsstufe des Profils ist der Plan sofort freigegeben (status `approved`, dann `plan_apply` aufrufen) oder wartet auf die Freigabe des Nutzers im Terminal (status `pending_approval`, dann dem Nutzer `macfly plan approve <plan_id>` nennen; die Freigabe führt den Plan sofort aus).",
             "inputSchema": {
                 "type": "object",
                 "required": ["operations"],
@@ -495,6 +523,26 @@ fn dispatch_tool(
             let query = args.get("query").and_then(Value::as_str);
             Ok(serde_json::to_value(sf.tabs(query)?)?)
         }
+        "music_playlists" => Ok(serde_json::to_value(
+            MusicAdapter::new(cfg.script_timeout_secs).playlists()?,
+        )?),
+        "music_tracks" => {
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+            let playlist = args.get("playlist").and_then(Value::as_str);
+            Ok(serde_json::to_value(
+                MusicAdapter::new(cfg.script_timeout_secs).tracks(playlist, limit)?,
+            )?)
+        }
+        "music_stats" => {
+            let top = args.get("top").and_then(Value::as_u64).unwrap_or(20) as usize;
+            let stale = args
+                .get("stale_days")
+                .and_then(Value::as_u64)
+                .unwrap_or(365);
+            Ok(serde_json::to_value(
+                MusicAdapter::new(cfg.script_timeout_secs).stats(top, stale)?,
+            )?)
+        }
         "photos_albums" => {
             let ph = PhotosAdapter::new(cfg.script_timeout_secs);
             Ok(serde_json::to_value(ph.albums()?)?)
@@ -604,7 +652,7 @@ mod tests {
     fn mcp_tools_have_annotations_and_never_expose_approve() {
         let tools = tool_definitions();
         let arr = tools.as_array().expect("tools must be an array");
-        assert_eq!(arr.len(), 22);
+        assert_eq!(arr.len(), 25);
         for tool in arr {
             let name = tool["name"].as_str().unwrap();
             assert_ne!(name, "plan_approve");

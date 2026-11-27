@@ -42,8 +42,8 @@ Each profile has a `preset` that decides which plans run without asking you.
 | Preset | Runs automatically | Needs your approval |
 |---|---|---|
 | `strict` | nothing | every change |
-| `balanced` (default) | `notes_create`, `notes_create_folder`, `mail_create_draft`, `mail_mark_read`, `reminders_create` — up to 5 operations per plan | `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move`, `shortcuts_run`, and any plan with more than 5 operations |
-| `open` | additionally `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move` — in any number | `shortcuts_run` |
+| `balanced` (default) | `notes_create`, `notes_create_folder`, `mail_create_draft`, `mail_mark_read`, `reminders_create`, `music_playlist_add` — up to 5 operations per plan | `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move`, `photos_export`, `shortcuts_run`, and any plan with more than 5 operations |
+| `open` | additionally `notes_append`, `notes_move`, `notes_move_folder_contents`, `notes_delete_empty_folder`, `mail_move`, `photos_export` — in any number | `shortcuts_run` |
 
 In every preset, scope rules (`deny_folders`, `deny_mailboxes`, allowlists) and
 DLP redaction apply, mails are only ever saved as drafts, and every applied plan
@@ -146,3 +146,23 @@ is journaled. `--no-redact` only works in an interactive terminal.
 > configured Apple Mail signature (`signature.source = "apple-mail"`) and opens
 > the message as a **draft** for human review — MacFly never sends emails
 > unattended.
+
+### Apple Music
+
+```json
+{
+  "summary": "Rediscovered favourites",
+  "operations": [
+    {
+      "action": "music_playlist_add",
+      "playlist": "Rediscovered",
+      "track_ids": ["6F6FF4727005BF1E", "A62BA311354E332D"]
+    }
+  ]
+}
+```
+
+> `music_playlist_add` creates the playlist if it does not exist and adds the
+> tracks by persistent ID (from `macfly music tracks` or `music_stats`). IDs
+> that are no longer in the library are skipped and reported. See
+> [Apple Music](../music/).

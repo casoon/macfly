@@ -25,7 +25,7 @@ import { castDemo } from '../casts';
 type Cell = boolean | string;
 const capabilityColumns = [
   { key: 'read', label: 'Read & search' },
-  { key: 'export', label: 'Export to Markdown' },
+  { key: 'export', label: 'Export' },
   { key: 'import', label: 'Import' },
   { key: 'change', label: 'Change via plan' },
   { key: 'auto', label: 'Runs without asking' },
@@ -37,6 +37,8 @@ const capabilities: { app: string; note: string; cells: Record<(typeof capabilit
   { app: 'Calendar', note: 'Upcoming events', cells: { read: 'next N days', export: true, import: false, change: false, auto: false } },
   { app: 'Reminders', note: 'Lists & due dates', cells: { read: 'open · overdue', export: true, import: '.md .json .csv', change: 'create', auto: 'new reminders' } },
   { app: 'Safari', note: 'Open tabs', cells: { read: 'open tabs', export: true, import: false, change: 'tabs → note', auto: 'tabs → note' } },
+  { app: 'Photos', note: 'Albums & metadata', cells: { read: 'albums · keywords · dates', export: 'files + XMP/JSON', import: false, change: 'export originals or JPEGs', auto: false } },
+  { app: 'Music', note: 'Library & play counters', cells: { read: 'playlists · listening stats', export: 'stats as CSV/JSON', import: false, change: 'create · fill playlists', auto: 'playlist additions' } },
   { app: 'Shortcuts', note: 'Allowlist only', cells: { read: 'list', export: false, import: false, change: 'run allowlisted', auto: false } },
 ];
 
@@ -66,7 +68,14 @@ const aiPrompts = [
     prompt:
       '“Export my project notes as Markdown for my local knowledge base, or import these CSV tasks into Apple Reminders after I review the plan.”',
     result:
-      'Structured Markdown export across all 7 macOS apps and two-way import for Apple Notes & Reminders (Markdown, HTML, JSON, JSONL, CSV).',
+      'Markdown export for Notes, Mail, Contacts, Calendar, Reminders and Safari, photo export with metadata, and two-way import for Apple Notes & Reminders (Markdown, HTML, JSON, JSONL, CSV).',
+  },
+  {
+    title: 'Rediscover my music',
+    prompt:
+      '“What did I listen to most this year, and which songs did I love but haven’t played in ages? Put those into a playlist.”',
+    result:
+      'MacFly reads the play and skip counters of your Apple Music library, ranks tracks, artists and genres, and builds the playlist through a plan.',
   },
 ];
 
@@ -133,7 +142,7 @@ macfly plan approve <plan-id>   # approves and applies`;
   <Hero
     eyebrow="CASOON open source · Controlled AI Access Layer for macOS"
     title="Let AI work with your Mac. On your terms."
-    lead="Give AI agents controlled access to Apple Notes, Mail, Calendar, Contacts, and more — through a secure, local execution layer. You describe the task. MacFly defines the boundaries, validates changes, and keeps you in control."
+    lead="Give AI agents controlled access to Apple Notes, Mail, Calendar, Contacts, Photos, Music, and more — through a secure, local execution layer. You describe the task. MacFly defines the boundaries, validates changes, and keeps you in control."
   >
     <Install
       commands={[
@@ -180,7 +189,7 @@ macfly plan approve <plan-id>   # approves and applies`;
     </div>
     <div class="prompt-links">
       <Button href={url('demo/')} variant="secondary">
-        Explore all 5 workflows, prompts &amp; configs
+        Explore workflows, prompts &amp; configs
       </Button>
       <Button href={url('docs/guide/mcp-and-agents/')} variant="quiet">
         MCP &amp; AI agent guide →
@@ -191,7 +200,7 @@ macfly plan approve <plan-id>   # approves and applies`;
   <!-- 2b. Capability matrix -->
   <section class="capabilities" aria-labelledby="capabilities-heading">
     <p class="eyebrow">What MacFly does</p>
-    <h2 id="capabilities-heading">Seven Apple apps, one controlled layer</h2>
+    <h2 id="capabilities-heading">Nine Apple apps, one controlled layer</h2>
     <p class="section-lead">
       What your AI can do in each app at a glance. Every change goes through a plan; the last
       column shows what the default <code>balanced</code> preset lets through without asking you.
@@ -265,7 +274,7 @@ macfly plan approve <plan-id>   # approves and applies`;
       },
       {
         label: '2 · Plan',
-        artifact: '22 MCP tools / CLI',
+        artifact: '25 MCP tools / CLI',
         title: 'Your AI proposes steps',
         body: 'Claude, Codex, Cursor, or Ollama reads DLP-filtered context and submits a typed change plan.',
       },
@@ -279,7 +288,7 @@ macfly plan approve <plan-id>   # approves and applies`;
         label: '4 · Execute',
         artifact: 'Lock + journal.jsonl',
         title: 'Deterministic apply',
-        body: 'Executed safely across Notes, Mail, Contacts, Calendar, Reminders, Safari & Shortcuts — resumable and logged.',
+        body: 'Executed safely across Notes, Mail, Reminders, Safari, Photos, Music & Shortcuts — resumable and logged.',
       },
     ]}
   />
@@ -324,10 +333,10 @@ macfly plan approve <plan-id>   # approves and applies`;
   <!-- 5. Technical Architecture & Comparison -->
   <Facts
     items={[
-      { value: '7 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts under one typed access layer' },
-      { value: '22 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
+      { value: '9 macOS apps', label: 'Notes, Mail, Contacts, Calendar, Reminders, Safari, Photos, Music, and Shortcuts under one typed access layer' },
+      { value: '25 MCP tools', label: 'read, 360° context packs, plan creation & apply of approved plans — over MCP, agents can never approve writes' },
       { value: '3 presets', label: 'strict, balanced or open — one choice instead of a rulebook, explained by `macfly policy`' },
-      { value: '6 formats', label: 'Markdown export across all apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
+      { value: '6 formats', label: 'Markdown export for six apps + two-way import for Notes & Reminders (.md, .txt, .html, .json, .jsonl, .csv)' },
     ]}
   />
 
@@ -347,8 +356,8 @@ macfly plan approve <plan-id>   # approves and applies`;
         body: 'Inspect complete email draft bodies, line-by-line note additions, and high-risk Shortcut warnings before approving. Exclusive `.lock` files prevent duplicate runs; `partially_applied` plans resume cleanly with `--resume`.',
       },
       {
-        title: 'Migrations & local backups (Notes & Reminders two-way)',
-        body: 'Export Apple Notes trees, emails, contacts, calendar schedules, reminders, and Safari tabs into clean Markdown with YAML frontmatter. Import Notes & Reminders from Markdown, HTML, JSON, JSONL, or CSV via reviewable plans.',
+        title: 'Migrations, backups & photo export',
+        body: 'Export Apple Notes trees, emails, contacts, calendar schedules, reminders, and Safari tabs into clean Markdown with YAML frontmatter, and photos as originals or JPEGs with XMP/JSON metadata and a SHA-256 manifest. Import Notes & Reminders from Markdown, HTML, JSON, JSONL, or CSV via reviewable plans.',
       },
       {
         title: 'Pure Rust core, static stdin-only JXA edge',
@@ -374,7 +383,7 @@ macfly plan approve <plan-id>   # approves and applies`;
         topic: 'Mail & app coverage',
         cells: [
           'Usually Gmail or Microsoft 365 only; separate OAuth setup per account.',
-          '**Every account in Apple Mail** (iCloud, Gmail, Exchange, custom IMAP) plus Notes, Contacts, Calendar, Reminders, Safari & Shortcuts.',
+          '**Every account in Apple Mail** (iCloud, Gmail, Exchange, custom IMAP) plus Notes, Contacts, Calendar, Reminders, Safari, Photos, Music & Shortcuts.',
         ],
       },
       {
@@ -395,7 +404,7 @@ macfly plan approve <plan-id>   # approves and applies`;
         topic: 'Migrations & portability',
         cells: [
           'Locked into vendor cloud silos.',
-          '**Markdown exports across all 7 apps** plus two-way Markdown/CSV/JSON/HTML migrations for Notes & Reminders.',
+          '**Markdown exports for six apps, photo exports with metadata** plus two-way Markdown/CSV/JSON/HTML migrations for Notes & Reminders.',
         ],
       },
     ]}
@@ -468,7 +477,7 @@ macfly plan approve <plan-id>   # approves and applies`;
   }
   .prompt-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
     gap: 20px;
     margin-bottom: 24px;
   }

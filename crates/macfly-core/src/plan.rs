@@ -98,6 +98,12 @@ pub enum PlanOperation {
         #[serde(default)]
         notes: Option<String>,
     },
+    /// Legt eine Playlist in Apple Music an (falls nötig) und fügt Titel aus der Mediathek hinzu.
+    MusicPlaylistAdd {
+        playlist: String,
+        /// Persistente Track-IDs aus `macfly music tracks`.
+        track_ids: Vec<String>,
+    },
     /// Exportiert Fotos/Videos aus Apple Photos als neue Dateien (nie überschreibend).
     PhotosExport {
         media_ids: Vec<String>,
@@ -256,6 +262,7 @@ pub const ACTION_RISKS: &[(&str, RiskLevel)] = &[
     ("mail_create_draft", RiskLevel::Low),
     ("mail_mark_read", RiskLevel::Low),
     ("reminders_create", RiskLevel::Low),
+    ("music_playlist_add", RiskLevel::Low),
     ("photos_export", RiskLevel::Medium),
     ("notes_append", RiskLevel::Medium),
     ("notes_move", RiskLevel::Medium),
@@ -303,7 +310,8 @@ impl PlanOperation {
             | Self::NotesCreateFolder { .. }
             | Self::MailCreateDraft { .. }
             | Self::MailMarkRead { .. }
-            | Self::RemindersCreate { .. } => RiskLevel::Low,
+            | Self::RemindersCreate { .. }
+            | Self::MusicPlaylistAdd { .. } => RiskLevel::Low,
             Self::NotesAppend { .. }
             | Self::NotesMove { .. }
             | Self::NotesMoveFolderContents { .. }
@@ -414,6 +422,13 @@ impl PlanOperation {
                         lines.push(format!("    + {nline}"));
                     }
                 }
+            }
+            Self::MusicPlaylistAdd {
+                playlist,
+                track_ids,
+            } => {
+                lines.push(format!("    Playlist: {playlist}"));
+                lines.push(format!("    Titel:    {}", track_ids.len()));
             }
             Self::PhotosExport {
                 media_ids,
@@ -542,6 +557,13 @@ impl PlanOperation {
                 Some(l) => format!("[reminders.create] Neue Erinnerung '{title}' in Liste '{l}'"),
                 None => format!("[reminders.create] Neue Erinnerung '{title}'"),
             },
+            Self::MusicPlaylistAdd {
+                playlist,
+                track_ids,
+            } => format!(
+                "[music.playlist_add] {} Titel → Playlist '{playlist}'",
+                track_ids.len()
+            ),
             Self::PhotosExport {
                 media_ids,
                 destination,
@@ -694,6 +716,17 @@ impl PlanOperation {
                 if title.trim().is_empty() {
                     return Err(MacflyError::PlanError(
                         "reminders.create benötigt einen nicht-leeren Titel".to_string(),
+                    ));
+                }
+            }
+            Self::MusicPlaylistAdd {
+                playlist,
+                track_ids,
+            } => {
+                if playlist.trim().is_empty() || track_ids.is_empty() {
+                    return Err(MacflyError::PlanError(
+                        "music.playlist_add benötigt Playlist-Namen und mindestens eine Track-ID"
+                            .to_string(),
                     ));
                 }
             }
