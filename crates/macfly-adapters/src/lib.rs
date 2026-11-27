@@ -4,6 +4,7 @@ pub mod context;
 pub mod executor;
 pub mod jxa;
 pub mod mail;
+pub mod music;
 pub mod notes;
 pub mod photos;
 pub mod safari;

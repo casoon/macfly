@@ -14,6 +14,13 @@ agents (or shell workflows) and your personal macOS data:
   Apple Mail, search, quote-trimmed reading, and safe draft creation.
 - **Apple Calendar & Reminders:** upcoming events, open/overdue reminders,
   and a unified `daily-brief` context pack across all four apps.
+- **Apple Contacts & Safari:** contact search and audit, open tabs to Markdown or a note.
+- **Apple Photos:** albums and photo metadata, export of originals or rendered
+  JPEGs with XMP/JSON metadata through a reviewed plan.
+- **Apple Music:** playlists, listening statistics from the play counters, and
+  playlists built through a reviewed plan.
+- **Apple Shortcuts:** allowlist-gated runs for Focus modes, HomeKit scenes
+  and App Intents.
 
 ## Core design principles
 
@@ -45,6 +52,8 @@ agents (or shell workflows) and your personal macOS data:
   Structure-agnostic 4-phase field guide & real-world Apple Notes edge cases.
 - **[Apple Shortcuts & Automation](/macfly/docs/guide/shortcuts/):**
   Allowlist-gated `shortcuts run` for Focus modes, HomeKit scenes, and App Intents.
+- **[Apple Music](/macfly/docs/guide/music/):**
+  Playlists, listening statistics and playlist plans.
 - **[MCP & AI Agents](/macfly/docs/guide/mcp-and-agents/):** Connecting
   Claude Desktop, Cursor, Codex, or custom agents safely.
 - **[Why Rust + AppleScript/JXA](/macfly/docs/architecture/rust-and-applescript/):**

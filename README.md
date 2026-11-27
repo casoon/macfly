@@ -2,7 +2,7 @@
 
 **Let AI work with your Mac. On your terms.**
 
-MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI agents (Claude, Codex, Cursor, or local LLMs via Ollama/MLX) policy-guarded access to Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, and Shortcuts, with local secret redaction and human-approved change plans.
+MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI agents (Claude, Codex, Cursor, or local LLMs via Ollama/MLX) policy-guarded access to Apple Notes, Mail, Contacts, Calendar, Reminders, Safari, Photos, Music, and Shortcuts, with local secret redaction and human-approved change plans.
 
 > *Your AI knows what to do. MacFly controls what it can do.*
 
@@ -20,13 +20,14 @@ MacFly is a **Controlled AI Access Layer** for macOS in pure Rust — giving AI 
 - **Apple Calendar & Reminders** — upcoming events, open/overdue reminders, unified 4-app `daily-brief` context pack, **Calendar/Reminders Markdown export**, and **multi-format Reminders import** (`.md`, `.txt`, `.json`, `.jsonl`, `.csv`)
 - **Apple Safari** — inspect open browser tabs (`safari tabs`), export tabs to Markdown (`safari export`), or migrate open research tabs directly into an Apple Note via plan (`safari to-note`)
 - **Apple Photos** — list albums and photos with metadata (`photos albums`, `photos list`), and export through a reviewed plan (`photos export`): original files or rendered JPEGs, optional XMP/JSON metadata files next to each photo, optional conversion with the built-in `sips` (HEIC → JPEG/PNG/TIFF, smaller size, quality); never overwrites, writes a SHA-256 manifest
+- **Apple Music** — playlists and tracks (`music playlists`, `music tracks`), listening statistics from the library's play counters (`music stats`: top tracks, artists, albums and genres, most skipped, rediscover, never played; `--csv` for spreadsheets), and playlists created and filled through a reviewed plan (`music add`)
 - **Apple Shortcuts** — allowlist-gated bridge to `shortcuts list` and `shortcuts run` (Focus modes, HomeKit scenes, modern App Intents)
 - **Cross-app Context Packs & Typst/PDF Dossiers** — `context daily-brief`, `context person "<Name/Email>"` (360° dossier across 5 apps), `context meeting-prep [--create-note]`, `context weekly-review`, plus `macfly report` for Typst (`.typ` / `renderreport`), Markdown (`.md`), or PDF (`.pdf`) dossiers
 - **Agent Skill Exporter & `launchd` Scheduler** — `macfly skill export` generates a ready-to-use `SKILL.md` for Claude Code, Codex, Cursor, or Antigravity; `macfly schedule` manages native macOS `LaunchAgents` without a custom background daemon
 - **Read-side Data Firewall (DLP)** — profile-based allowlists/denylists (`deny_folders`, `deny_mailboxes`) plus automatic linear-time regex redaction of private keys, API keys, IBANs, Luhn-valid card numbers, 6-digit OTP codes, and passwords after keywords like `Passwort:` before output reaches any LLM
 - **Security presets** — pick `strict`, `balanced` (default) or `open` once instead of writing rules: `balanced` lets low-risk creates (notes, folders, mail drafts, reminders) run automatically and asks you for moves, appends, deletes and Shortcuts; `macfly policy` explains the active rules in plain language
 - **Transactional change plans & `runemark` terminal UI** — every write goes through `plan create → inspect → approve → apply` with canonical SHA-256 plan hashing, tamper detection, expiry TTL, interactive approval for everything the preset doesn't cover, a local JSONL audit journal, and semantic terminal reports powered by [`runemark`](https://casoon.github.io/runemark/)
-- **Built-in `stdio` MCP server** — exposes 22 read, context-pack & plan tools (`plan_create`, `plan_inspect`, `plan_apply` for already-approved plans); `plan_approve` is intentionally excluded from MCP so agents can propose changes but never approve them
+- **Built-in `stdio` MCP server** — exposes 25 read, context-pack & plan tools (`plan_create`, `plan_inspect`, `plan_apply` for already-approved plans); `plan_approve` is intentionally excluded from MCP so agents can propose changes but never approve them
 
 ## Why Rust + AppleScript/JXA
 
@@ -99,6 +100,13 @@ macfly safari tabs
 macfly safari export --output ./research-tabs.md
 macfly safari to-note --folder "00 · Inbox" --title "Research Links"
 macfly shortcuts list
+
+# Apple Photos & Apple Music
+macfly photos albums
+macfly photos export --album "Receipts" --to ~/Pictures/Export --originals --sidecar xmp
+macfly music playlists
+macfly music stats --top 10 --csv ./music.csv
+macfly music add --playlist "Rediscovered" <track-id> <track-id>
 
 # Multi-app context packs & Typst / PDF dossiers
 macfly context daily-brief --format agent

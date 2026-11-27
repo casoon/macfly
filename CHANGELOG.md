@@ -11,7 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Photos:** `macfly photos export` creates a plan (`photos_export`, risk medium, so it needs your approval under `balanced`) that exports originals or rendered JPEGs, optionally with an XMP or JSON metadata file per photo and a conversion with the built-in `sips` (format, maximum size, quality). Files are never overwritten, and a `.sha256` manifest lands next to them.
 - **CLI:** `macfly config init` asks for language and security level with arrow-key menus (and `--language en|de`); the language is stored as `language` in the config.
 - **Config:** `export.allow_dirs` limits where plans may write files; by default only folders below the home folder, never `~/Library`.
-- **MCP:** tools `photos_albums` and `photos_list` (22 tools in total); exporting goes through `plan_create`.
+- **Music:** `macfly music playlists` and `macfly music tracks` read Apple Music playlists and tracks; `macfly music add` creates a plan (`music_playlist_add`, risk low) that creates a playlist if needed and adds library tracks by ID.
+- **Music:** `macfly music stats` evaluates the per-track counters (plays, skips, last played): top tracks, artists, albums and genres, most skipped, formerly often played but stale, never played; `--csv` writes every track with its counters for spreadsheets, `--format json` gives the same as structured data. Music keeps counters only, no listening history with timestamps.
+- **MCP:** tools `photos_albums`, `photos_list`, `music_playlists`, `music_tracks` and `music_stats` (25 tools in total); exporting goes through `plan_create`.
 
 ### Changed
 

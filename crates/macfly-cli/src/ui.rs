@@ -1,6 +1,9 @@
 use std::io;
 
 use macfly_adapters::executor::ApplyReport;
+use macfly_adapters::music::{
+    MusicGroupStat, MusicPlaylistsResult, MusicStatsResult, MusicTrackStat, MusicTracksResult,
+};
 use macfly_core::error::MacflyError;
 use macfly_core::model::{
     ContactsAuditReport, DailyBrief, MailOverview, MeetingPrepContext, NotesAuditReport,
@@ -9,8 +12,8 @@ use macfly_core::model::{
 use macfly_core::plan::{PlanStatus, RiskLevel, StoredPlan};
 use macfly_core::plan_text::{Lang, plan_steps, risk_label, undo_label};
 use runemark::{
-    ColorMode, Console, DetailLevel, ErrorBlock, Finding, FindingGroup, Group, Item, Menu, Metric,
-    NextStep, Outcome, Report, SelectMode, Tone, Verdict,
+    Align, Cell, ColorMode, Column, Console, DetailLevel, ErrorBlock, Finding, FindingGroup, Group,
+    Item, KeyValues, Menu, Metric, NextStep, Outcome, Report, SelectMode, Table, Tone, Verdict,
 };
 
 pub fn render_error(err: &MacflyError, color: ColorMode) {
@@ -1108,4 +1111,326 @@ pub fn choose(
         Outcome::Selected(id) => Some(id),
         Outcome::Hotkey(_) | Outcome::Cancelled | Outcome::Unavailable => None,
     })
+}
+
+// ---------- Apple Music ----------
+
+fn tr(lang: Lang, de: &str, en: &str) -> String {
+    match lang {
+        Lang::De => de.to_string(),
+        Lang::En => en.to_string(),
+    }
+}
+
+fn grouped(n: u64, lang: Lang) -> String {
+    let sep = if lang == Lang::De { '.' } else { ',' };
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(sep);
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn clip(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        text.to_string()
+    } else {
+        format!(
+            "{}…",
+            text.chars().take(max - 1).collect::<String>().trim_end()
+        )
+    }
+}
+
+fn music_section(console: Console, title: String) {
+    println!();
+    println!("{}", console.paint(Tone::Title, title));
+}
+
+fn day(iso: Option<&str>) -> String {
+    iso.and_then(|d| d.get(..10)).unwrap_or("—").to_string()
+}
+
+fn none_line(console: Console, lang: Lang) {
+    println!(
+        "{}",
+        console.paint(Tone::Muted, tr(lang, "  (keine)", "  (none)"))
+    );
+}
+
+fn track_table(console: Console, lang: Lang, rows: &[MusicTrackStat], skips: bool) {
+    if rows.is_empty() {
+        return none_line(console, lang);
+    }
+    let count_title = if skips {
+        tr(lang, "Übersprungen", "Skips")
+    } else {
+        tr(lang, "Wiedergaben", "Plays")
+    };
+    let mut t = Table::new()
+        .add_column(Column::new().with_title("#").with_align(Align::Right))
+        .add_column(
+            Column::new()
+                .with_title(count_title)
+                .with_align(Align::Right),
+        )
+        .add_column(Column::new().with_title(tr(lang, "Interpret", "Artist")))
+        .add_column(Column::new().with_title(tr(lang, "Titel", "Title")))
+        .add_column(Column::new().with_title(tr(lang, "Zuletzt", "Last played")));
+    for (i, r) in rows.iter().enumerate() {
+        let n = if skips {
+            r.skipped_count
+        } else {
+            r.played_count
+        };
+        t = t.add_row([
+            Cell::new((i + 1).to_string()).with_tone(Tone::Muted),
+            Cell::new(n.to_string()).with_tone(Tone::Info),
+            Cell::new(clip(&r.artist, 28)),
+            Cell::new(clip(&r.title, 44)),
+            Cell::new(day(r.last_played.as_deref())).with_tone(Tone::Muted),
+        ]);
+    }
+    print!("{}", t.render(console));
+}
+
+fn group_table(console: Console, lang: Lang, first: String, rows: &[MusicGroupStat], total: u64) {
+    if rows.is_empty() {
+        return none_line(console, lang);
+    }
+    let max = rows.iter().map(|g| g.plays).max().unwrap_or(1).max(1);
+    let mut t = Table::new()
+        .add_column(Column::new().with_title("#").with_align(Align::Right))
+        .add_column(
+            Column::new()
+                .with_title(tr(lang, "Wiedergaben", "Plays"))
+                .with_align(Align::Right),
+        )
+        .add_column(
+            Column::new()
+                .with_title(tr(lang, "Anteil", "Share"))
+                .with_align(Align::Right),
+        )
+        .add_column(Column::new())
+        .add_column(
+            Column::new()
+                .with_title(tr(lang, "Titel", "Tracks"))
+                .with_align(Align::Right),
+        )
+        .add_column(Column::new().with_title(first));
+    for (i, g) in rows.iter().enumerate() {
+        let bar = "▇".repeat((g.plays * 12).div_ceil(max) as usize);
+        let pct = g.plays as f64 * 100.0 / total.max(1) as f64;
+        t = t.add_row([
+            Cell::new((i + 1).to_string()).with_tone(Tone::Muted),
+            Cell::new(g.plays.to_string()).with_tone(Tone::Info),
+            Cell::new(format!("{pct:.0} %")).with_tone(Tone::Muted),
+            Cell::new(bar).with_tone(Tone::Success),
+            Cell::new(g.tracks.to_string()).with_tone(Tone::Muted),
+            Cell::new(clip(&g.name, 56)),
+        ]);
+    }
+    print!("{}", t.render(console));
+}
+
+pub fn render_music_stats(res: &MusicStatsResult, stale_days: u64, color: ColorMode) {
+    let console = Console::stdout(color);
+    let lang = Lang::detect();
+    let s = &res.summary;
+    println!(
+        "{}",
+        console.paint(
+            Tone::Title,
+            tr(
+                lang,
+                "Apple Music · Hörstatistik",
+                "Apple Music · listening stats"
+            )
+        )
+    );
+    println!("{}", console.rule(52));
+    let played = s.tracks - s.never_played;
+    let kv = KeyValues::new()
+        .add(
+            tr(lang, "Titel in der Mediathek", "Tracks in library"),
+            grouped(s.tracks as u64, lang),
+        )
+        .add_toned(
+            tr(lang, "Wiedergaben", "Plays"),
+            Tone::Info,
+            format!(
+                "{}  (≈ {} h)",
+                grouped(s.total_plays, lang),
+                s.listened_hours
+            ),
+        )
+        .add(
+            tr(lang, "Schon gehört", "Ever played"),
+            format!(
+                "{}  ({:.0} %)",
+                grouped(played as u64, lang),
+                played as f64 * 100.0 / s.tracks.max(1) as f64
+            ),
+        )
+        .add(
+            tr(lang, "Nie gespielt", "Never played"),
+            grouped(s.never_played as u64, lang),
+        )
+        .add(
+            tr(lang, "In den letzten 30 Tagen", "Played in last 30 days"),
+            grouped(s.played_last_30_days as u64, lang),
+        )
+        .add(
+            tr(lang, "Übersprungen", "Skips"),
+            grouped(s.total_skips, lang),
+        );
+    print!("{}", kv.render(console));
+
+    music_section(console, tr(lang, "Meistgespielte Titel", "Top tracks"));
+    track_table(console, lang, &res.top_tracks, false);
+    music_section(
+        console,
+        tr(lang, "Meistgespielte Interpreten", "Top artists"),
+    );
+    group_table(
+        console,
+        lang,
+        tr(lang, "Interpret", "Artist"),
+        &res.top_artists,
+        s.total_plays,
+    );
+    music_section(console, tr(lang, "Meistgespielte Alben", "Top albums"));
+    group_table(
+        console,
+        lang,
+        "Album".to_string(),
+        &res.top_albums,
+        s.total_plays,
+    );
+    music_section(console, "Genres".to_string());
+    group_table(
+        console,
+        lang,
+        "Genre".to_string(),
+        &res.top_genres,
+        s.total_plays,
+    );
+    music_section(
+        console,
+        tr(lang, "Am häufigsten übersprungen", "Most skipped"),
+    );
+    track_table(console, lang, &res.most_skipped, true);
+    music_section(
+        console,
+        match lang {
+            Lang::De => {
+                format!("Wiederentdecken · gehört, aber seit {stale_days}+ Tagen nicht mehr")
+            }
+            Lang::En => format!("Rediscover · played before, not in {stale_days}+ days"),
+        },
+    );
+    track_table(console, lang, &res.stale, false);
+    music_section(
+        console,
+        tr(
+            lang,
+            "Nie gespielt · älteste Zugänge zuerst",
+            "Never played · oldest additions first",
+        ),
+    );
+    if res.never_played_oldest.is_empty() {
+        none_line(console, lang);
+    } else {
+        let mut t = Table::new()
+            .add_column(Column::new().with_title(tr(lang, "Hinzugefügt", "Added")))
+            .add_column(Column::new().with_title(tr(lang, "Interpret", "Artist")))
+            .add_column(Column::new().with_title(tr(lang, "Titel", "Title")));
+        for r in &res.never_played_oldest {
+            t = t.add_row([
+                Cell::new(day(r.added_at.as_deref())).with_tone(Tone::Muted),
+                Cell::new(clip(&r.artist, 28)),
+                Cell::new(clip(&r.title, 56)),
+            ]);
+        }
+        print!("{}", t.render(console));
+    }
+    println!();
+    println!(
+        "{}",
+        console.paint(
+            Tone::Muted,
+            tr(
+                lang,
+                "Music führt nur Zähler pro Titel, keinen Hörverlauf. Alle Titel als Tabelle: --csv <datei>",
+                "Music keeps counters per track, not a listening history. Every track as a spreadsheet: --csv <file>",
+            )
+        )
+    );
+}
+
+pub fn render_music_playlists(res: &MusicPlaylistsResult, color: ColorMode) {
+    let console = Console::stdout(color);
+    let lang = Lang::detect();
+    println!(
+        "{}",
+        console.paint(
+            Tone::Title,
+            format!("Apple Music · {} Playlists", res.total_matched)
+        )
+    );
+    let mut t = Table::new()
+        .add_column(
+            Column::new()
+                .with_title(tr(lang, "Titel", "Tracks"))
+                .with_align(Align::Right),
+        )
+        .add_column(Column::new().with_title("Playlist"))
+        .add_column(Column::new().with_title(tr(lang, "Art", "Kind")));
+    for p in &res.playlists {
+        let tone = if p.kind == "playlist" {
+            Tone::Muted
+        } else {
+            Tone::Info
+        };
+        t = t.add_row([
+            Cell::new(p.track_count.to_string()),
+            Cell::new(clip(&p.name, 60)),
+            Cell::new(p.kind.clone()).with_tone(tone),
+        ]);
+    }
+    print!("{}", t.render(console));
+}
+
+pub fn render_music_tracks(res: &MusicTracksResult, color: ColorMode) {
+    let console = Console::stdout(color);
+    let lang = Lang::detect();
+    let title = match lang {
+        Lang::De => format!(
+            "Apple Music · {} von {} Titeln",
+            res.returned, res.total_matched
+        ),
+        Lang::En => format!(
+            "Apple Music · {} of {} tracks",
+            res.returned, res.total_matched
+        ),
+    };
+    println!("{}", console.paint(Tone::Title, title));
+    let mut t = Table::new()
+        .add_column(Column::new().with_title("ID"))
+        .add_column(Column::new().with_title(tr(lang, "Interpret", "Artist")))
+        .add_column(Column::new().with_title(tr(lang, "Titel", "Title")))
+        .add_column(Column::new().with_title("Album"));
+    for r in &res.tracks {
+        t = t.add_row([
+            Cell::new(r.id.clone()).with_tone(Tone::Muted),
+            Cell::new(r.artist.clone()),
+            Cell::new(r.title.clone()),
+            Cell::new(r.album.clone()).with_tone(Tone::Muted),
+        ]);
+    }
+    print!("{}", t.render(console));
 }
