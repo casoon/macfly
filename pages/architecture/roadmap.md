@@ -4,7 +4,7 @@ description: Implemented capabilities and upcoming security & performance milest
 order: 3
 ---
 
-## Implemented (v0.6.0)
+## Implemented (v0.7.0)
 
 - **Pure Rust 3-crate workspace** (`macfly-core`, `macfly-adapters`, `macfly`)
   published on `crates.io` with GitHub OIDC Trusted Publishing, plus a direct
@@ -31,6 +31,12 @@ order: 3
   and multi-format Reminders import (`PlanOperation::RemindersCreate`)
 - **Apple Safari:** open tab inspection (`safari tabs`), Markdown export, and
   direct tab-to-note migration via plan (`safari to-note`)
+- **Apple Photos:** albums and photo metadata (DLP-filtered), export of
+  originals or rendered JPEGs via plan (`photos_export`) with XMP/JSON metadata,
+  `sips` conversion and a SHA-256 manifest, limited by `export.allow_dirs`
+- **Apple Music:** playlists and tracks, listening statistics from the play
+  counters (`music stats`, CSV/JSON), and playlists built via plan
+  (`music_playlist_add`)
 - **Apple Shortcuts (`macfly shortcuts`):** allowlist-gated bridge to macOS
   `shortcuts list` / `shortcuts run` (`RiskLevel::High`, `Irreversible`)
 - **Terminal presentation with `runemark`:** semantic verdicts, reports,
@@ -56,7 +62,5 @@ order: 3
 - **Focused Workspace Hygiene:** Deliberate, non-bloated audit & plan workflows
   for Downloads, Desktop, browser tabs, and stale build artifacts (always via
   macOS Trash, never blind `rm -rf`)
-- **Targeted App Adapters (only where stable `sdef` dictionaries exist):**
-  Apple Photos (albums & targeted exports)
 - **Local SQLite FTS5 cache:** Incremental indexing for instant full-text search
   across 10,000+ email archives without touching private Apple databases by default

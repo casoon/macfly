@@ -5,23 +5,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
+### Breaking
+
+- **CLI:** `macfly plan approve` applies the plan right after you type the code, so one command replaces approve plus apply; `--no-apply` only approves. Scripts that ran `plan apply` after `plan approve` now find the plan already applied.
+
 ### Added
 
-- **Photos:** `macfly photos albums` and `macfly photos list` read albums and photos (title, description, keywords, date, location) from Apple Photos; titles and descriptions pass through the DLP firewall.
-- **Photos:** `macfly photos export` creates a plan (`photos_export`, risk medium, so it needs your approval under `balanced`) that exports originals or rendered JPEGs, optionally with an XMP or JSON metadata file per photo and a conversion with the built-in `sips` (format, maximum size, quality). Files are never overwritten, and a `.sha256` manifest lands next to them.
 - **CLI:** `macfly config init` asks for language and security level with arrow-key menus (and `--language en|de`); the language is stored as `language` in the config.
 - **Config:** `export.allow_dirs` limits where plans may write files; by default only folders below the home folder, never `~/Library`.
-- **Music:** `macfly music playlists` and `macfly music tracks` read Apple Music playlists and tracks; `macfly music add` creates a plan (`music_playlist_add`, risk low) that creates a playlist if needed and adds library tracks by ID.
-- **Music:** `macfly music stats` evaluates the per-track counters (plays, skips, last played): top tracks, artists, albums and genres, most skipped, formerly often played but stale, never played; `--csv` writes every track with its counters for spreadsheets, `--format json` gives the same as structured data. Music keeps counters only, no listening history with timestamps.
-- **MCP:** tools `photos_albums`, `photos_list`, `music_playlists`, `music_tracks` and `music_stats` (25 tools in total); exporting goes through `plan_create`.
+- **MCP:** tools `photos_albums`, `photos_list`, `music_playlists`, `music_tracks` and `music_stats` (25 tools in total); exporting and playlist changes go through `plan_create`.
+- **Music:** `macfly music playlists` and `macfly music tracks` read Apple Music playlists and tracks; `macfly music add` creates a plan (`music_playlist_add`, risk low) that creates a playlist if needed and adds library tracks by ID. Details: [Apple Music](https://casoon.github.io/macfly/docs/guide/music/).
+- **Music:** `macfly music stats` shows listening statistics from the per-track counters (top tracks, artists, albums and genres, most skipped, rediscover, never played); `--csv` writes every track with its counters for spreadsheets. Details: [Listening statistics](https://casoon.github.io/macfly/docs/guide/music/#listening-statistics).
+- **Photos:** `macfly photos albums` and `macfly photos list` read albums and photos (title, description, keywords, date, location) from Apple Photos; titles and descriptions pass through the DLP firewall.
+- **Photos:** `macfly photos export` creates a plan (`photos_export`, risk medium, so it needs your approval under `balanced`) that exports originals or rendered JPEGs, optionally with an XMP or JSON metadata file per photo and a conversion with the built-in `sips`. Files are never overwritten, and a `.sha256` manifest lands next to them.
 
 ### Changed
 
-- **CLI:** the menus of `macfly config init` wrap long descriptions on narrow terminals instead of cutting them (runemark 0.11).
-- **CLI:** `macfly plan approve` applies the plan right after you type the code, so one command replaces approve plus apply; `--no-apply` only approves.
-- **CLI:** the approval view and the result of `plan approve`/`plan apply` are bilingual (English by default; set `"language": "de"` in the config, let `macfly config init` ask, or override with `MACFLY_LANG=de|en`) and show a numbered flow; serial operations are summarised ("Export 200 photos"), reviewable content such as mail drafts and note text stays in full, and `--details` adds every detail.
+- **CLI:** the approval view and the result of `plan approve`/`plan apply` are bilingual (English by default; set `"language": "de"` in the config, let `macfly config init` ask, or override with `MACFLY_LANG=de|en`) and show a numbered flow; serial operations are summarised, reviewable content such as mail drafts and note text stays in full, and `--details` adds every detail.
+- **CLI:** the menus of `macfly config init` wrap long descriptions on narrow terminals instead of cutting them, and Music listings print as aligned tables (runemark 0.12).
 - **Pages:** the project site uses the current shared theme (0.19.0).
-
 
 ## [0.6.0] - 2026-11-25
 
