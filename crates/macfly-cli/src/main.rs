@@ -1166,6 +1166,7 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
             )?;
             fs::create_dir_all(output)?;
             let mut exported_files = Vec::new();
+            let mut used_paths = std::collections::HashSet::new();
             for summary in &list.notes {
                 let detail = adapter.read(profile_name, profile, &summary.id, false, *no_redact)?;
                 let rel_folder = if detail.folder_path.is_empty() {
@@ -1182,6 +1183,7 @@ fn handle_notes(cli: &Cli, action: &NotesAction) -> Result<(), MacflyError> {
                 fs::create_dir_all(&target_dir)?;
                 let fname = format!("{}.md", sanitize_filename(&detail.title));
                 let file_path = target_dir.join(fname);
+                let file_path = unique_export_path(file_path, &mut used_paths);
                 let md = format!(
                     "---\ntitle: {:?}\nid: {:?}\naccount: {:?}\nfolder: {:?}\nmodified_at: {:?}\nrevision: {:?}\n---\n\n{}\n",
                     detail.title,
@@ -1372,7 +1374,7 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
             no_redact,
         } => {
             ensure_redaction_bypass_allowed(*no_redact)?;
-            let list = adapter.list(
+            let mut list = adapter.list(
                 profile_name,
                 profile,
                 &ListMailQuery {
@@ -1380,10 +1382,13 @@ fn handle_mail(cli: &Cli, action: &MailAction) -> Result<(), MacflyError> {
                     mailbox: Some(mailbox.clone()),
                     unread_only: *unread,
                     query: query.clone(),
-                    limit: *limit,
-                    scan_limit: 250,
+                    limit: usize::MAX,
+                    scan_limit: usize::MAX,
                 },
             )?;
+            if *limit > 0 {
+                list.messages.truncate(*limit);
+            }
             fs::create_dir_all(output)?;
             let mut exported_files = Vec::new();
             for summary in &list.messages {
@@ -1938,9 +1943,11 @@ fn handle_contacts(cli: &Cli, action: &ContactsAction) -> Result<(), MacflyError
             let res = adapter.list(query.as_deref(), *limit)?;
             fs::create_dir_all(output)?;
             let mut exported_files = Vec::new();
+            let mut used_paths = std::collections::HashSet::new();
             for c in &res.contacts {
                 let fname = format!("{}.md", sanitize_filename(&c.name));
                 let file_path = output.join(fname);
+                let file_path = unique_export_path(file_path, &mut used_paths);
                 let md = format!(
                     "---\nname: {:?}\norganization: {:?}\nemails: {:?}\nphones: {:?}\nid: {:?}\n---\n\n# {}\n",
                     c.name,
@@ -2431,6 +2438,17 @@ fn print_mail_list(
         _ => emit_json(format, res)?,
     }
     Ok(())
+}
+
+fn unique_export_path(path: PathBuf, used: &mut std::collections::HashSet<String>) -> PathBuf {
+    let mut candidate = path.clone();
+    let mut suffix = 2;
+    while !used.insert(candidate.to_string_lossy().to_lowercase()) {
+        let stem = path.file_stem().unwrap().to_string_lossy();
+        candidate = path.with_file_name(format!("{stem}-{suffix}.md"));
+        suffix += 1;
+    }
+    candidate
 }
 
 fn sanitize_filename(input: &str) -> String {

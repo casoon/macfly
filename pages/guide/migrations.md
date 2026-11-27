@@ -30,6 +30,10 @@ approval + audit journal) rather than writing blindly. Imports with more than
 
 ---
 
+Notes export defaults to 100 notes and Mail export to 25 messages. Pass `--limit 0` to export all matching entries. Mail export scans the selected mailbox before applying the limit, which can take longer for large mailboxes. Calendar export covers the selected number of days.
+
+Reminder imports preserve titles, notes and lists. Due dates and priorities are not imported.
+
 ## 1. Exporting out of Apple's Ecosystem (to Markdown / Git)
 
 ### Apple Notes → Markdown folder tree

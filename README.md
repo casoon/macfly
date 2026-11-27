@@ -63,6 +63,12 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 gh attestation verify macfly-aarch64-apple-darwin.tar.gz --repo casoon/macfly
 ```
 
+Try a first everyday task by saving your open Safari tabs to a Markdown file on your Desktop:
+
+```sh
+macfly safari export --output ~/Desktop/reading-list.md
+```
+
 Everyday commands (all support `--format pretty`, `--format json`, and `--format agent`, plus `--color auto|always|never`):
 
 ```sh

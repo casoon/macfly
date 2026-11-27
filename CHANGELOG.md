@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-27
+
+### Changed
+
+- **Pages:** everyday examples make it easier to get started with Safari, Notes and Music.
+
+### Fixed
+
+- **Exports:** Calendar and Reminders exports include all matching entries beyond 50.
+- **Exports:** Mail export searches the whole selected mailbox and Notes and Contacts exports retain entries with duplicate names.
+- **Pages:** corrected security, music and reminder import examples.
+
 ## [0.7.0] - 2026-11-27
 
 ### Breaking

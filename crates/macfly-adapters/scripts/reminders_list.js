@@ -21,7 +21,7 @@ function isoOrNull(val) {
   const input = readInput();
   const listFilter = input.list ? String(input.list).toLowerCase() : null;
   const overdueOnly = Boolean(input.overdue_only);
-  const limit = Number(input.limit || 50);
+  const limit = Number(input.limit ?? 50);
 
   const nowMs = Date.now();
   const Reminders = Application("Reminders");

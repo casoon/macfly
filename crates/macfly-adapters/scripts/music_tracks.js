@@ -8,7 +8,7 @@ function readInput() {
 
 (function () {
   const input = readInput();
-  const limit = Number(input.limit || 100);
+  const limit = Number(input.limit ?? 100);
   const Music = Application("Music");
   let source;
   if (input.playlist) {

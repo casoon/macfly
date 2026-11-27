@@ -31,7 +31,7 @@ const SKIP_SYSTEM_CALS = new Set([
   const input = readInput();
   const days = Number(input.days || 7);
   const calendarFilter = input.calendar ? String(input.calendar).toLowerCase() : null;
-  const limit = Number(input.limit || 50);
+  const limit = Number(input.limit ?? 50);
 
   const now = new Date();
   const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
